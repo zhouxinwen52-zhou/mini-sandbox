@@ -6,7 +6,7 @@
 
 **Architecture:** Separate MCP, Codex-hook, and CLI entrypoints depend on a host-neutral core. Explicit execution calls `StoreOutput` directly; automatic interception routes on actual output size before calling it.
 
-**Tech Stack:** TypeScript, Node.js 22+, `@modelcontextprotocol/sdk`, Zod, `better-sqlite3` with FTS5, Vitest.
+**Tech Stack:** TypeScript, Node.js 22+, MCP TypeScript SDK v2 (`@modelcontextprotocol/server` and test-only `@modelcontextprotocol/client`), Zod, `better-sqlite3` with FTS5, Vitest.
 
 **Spec:** `docs/superpowers/specs/2026-09-16-mini-sandbox-design.md`
 
