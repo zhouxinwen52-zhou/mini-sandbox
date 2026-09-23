@@ -46,4 +46,21 @@ describe('executeCommand', () => {
       signal: 'SIGTERM',
     });
   });
+
+  test(
+    'closes unused stdin so commands waiting for EOF can finish',
+    async () => {
+      const result = await executeCommand(
+        `${process.execPath} -e "process.stdin.resume(); process.stdin.on('end', () => process.stdout.write('closed'))"`,
+      );
+
+      expect(result).toEqual({
+        stdout: 'closed',
+        stderr: '',
+        exitCode: 0,
+        signal: null,
+      });
+    },
+    250,
+  );
 });

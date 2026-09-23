@@ -4,7 +4,10 @@ import type { CapturedOutput } from './captured-output.js';
 
 export function executeCommand(command: string): Promise<CapturedOutput> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, { shell: true });
+    const child = spawn(command, {
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
