@@ -13,6 +13,7 @@ describe('command preview integration', () => {
     expect(captured).toEqual({
       stdout: 'START-中-middle-😀-END',
       stderr: '',
+      rawOutput: 'START-中-middle-😀-END',
       exitCode: 0,
       signal: null,
     });

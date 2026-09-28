@@ -7,6 +7,7 @@ describe('CapturedOutput', () => {
     expectTypeOf<CapturedOutput>().toEqualTypeOf<{
       stdout: string;
       stderr: string;
+      rawOutput: string;
       exitCode: number | null;
       signal: NodeJS.Signals | null;
     }>();
