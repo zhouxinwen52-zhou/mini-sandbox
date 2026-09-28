@@ -9,6 +9,7 @@ describe('executeCommand', () => {
     expect(result).toEqual({
       stdout: 'hello',
       stderr: '',
+      rawOutput: 'hello',
       exitCode: 0,
       signal: null,
     });
@@ -20,6 +21,7 @@ describe('executeCommand', () => {
     expect(result).toEqual({
       stdout: '',
       stderr: 'warning',
+      rawOutput: 'warning',
       exitCode: 0,
       signal: null,
     });
@@ -31,6 +33,7 @@ describe('executeCommand', () => {
     expect(result).toEqual({
       stdout: '',
       stderr: 'failure',
+      rawOutput: 'failure',
       exitCode: 7,
       signal: null,
     });
@@ -42,6 +45,7 @@ describe('executeCommand', () => {
     expect(result).toEqual({
       stdout: '',
       stderr: '',
+      rawOutput: '',
       exitCode: null,
       signal: 'SIGTERM',
     });
@@ -57,10 +61,21 @@ describe('executeCommand', () => {
       expect(result).toEqual({
         stdout: 'closed',
         stderr: '',
+        rawOutput: 'closed',
         exitCode: 0,
         signal: null,
       });
     },
     250,
   );
+
+  test('preserves the observed order of stdout and stderr chunks', async () => {
+    const result = await executeCommand(
+      `${process.execPath} -e "process.stdout.write('A'); setTimeout(() => process.stderr.write('B'), 20); setTimeout(() => process.stdout.write('C'), 40)"`,
+    );
+
+    expect(result.stdout).toBe('AC');
+    expect(result.stderr).toBe('B');
+    expect(result.rawOutput).toBe('ABC');
+  });
 });

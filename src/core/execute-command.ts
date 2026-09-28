@@ -10,18 +10,22 @@ export function executeCommand(command: string): Promise<CapturedOutput> {
     });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    const rawOutputChunks: Buffer[] = [];
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdoutChunks.push(chunk);
+      rawOutputChunks.push(chunk);
     });
     child.stderr.on('data', (chunk: Buffer) => {
       stderrChunks.push(chunk);
+      rawOutputChunks.push(chunk);
     });
     child.on('error', reject);
     child.on('close', (exitCode, signal) => {
       resolve({
         stdout: Buffer.concat(stdoutChunks).toString('utf8'),
         stderr: Buffer.concat(stderrChunks).toString('utf8'),
+        rawOutput: Buffer.concat(rawOutputChunks).toString('utf8'),
         exitCode,
         signal,
       });
