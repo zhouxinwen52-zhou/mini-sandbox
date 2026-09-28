@@ -14,6 +14,7 @@ describe('SqliteOutputStore', () => {
       sessionId: 'session-def',
       source: 'ctx_run',
       toolInput: 'printf hello',
+      rawOutput: 'hello',
       stdout: 'hello',
       stderr: '',
       exitCode: 0,

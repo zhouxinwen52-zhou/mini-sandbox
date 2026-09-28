@@ -4,6 +4,7 @@ export interface OutputRecord {
   sessionId: string;
   source: string;
   toolInput: string;
+  rawOutput: string;
   stdout: string;
   stderr: string;
   exitCode: number | null;

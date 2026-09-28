@@ -8,6 +8,7 @@ interface OutputRow {
   session_id: string;
   source: string;
   tool_input: string;
+  raw_output: string;
   stdout: string;
   stderr: string;
   exit_code: number | null;
@@ -25,6 +26,7 @@ export class SqliteOutputStore implements OutputStore {
         session_id TEXT NOT NULL,
         source TEXT NOT NULL,
         tool_input TEXT NOT NULL,
+        raw_output TEXT NOT NULL,
         stdout TEXT NOT NULL,
         stderr TEXT NOT NULL,
         exit_code INTEGER,
@@ -39,10 +41,10 @@ export class SqliteOutputStore implements OutputStore {
     this.database
       .prepare(
         `INSERT INTO outputs (
-          handle, project_id, session_id, source, tool_input,
+          handle, project_id, session_id, source, tool_input, raw_output,
           stdout, stderr, exit_code, signal, byte_count, created_at
         ) VALUES (
-          @handle, @projectId, @sessionId, @source, @toolInput,
+          @handle, @projectId, @sessionId, @source, @toolInput, @rawOutput,
           @stdout, @stderr, @exitCode, @signal, @byteCount, @createdAt
         )`,
       )
@@ -64,6 +66,7 @@ export class SqliteOutputStore implements OutputStore {
       sessionId: row.session_id,
       source: row.source,
       toolInput: row.tool_input,
+      rawOutput: row.raw_output,
       stdout: row.stdout,
       stderr: row.stderr,
       exitCode: row.exit_code,
