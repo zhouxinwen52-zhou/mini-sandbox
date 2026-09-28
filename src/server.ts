@@ -3,6 +3,7 @@ import * as z from 'zod/v4';
 
 import type { CapturedOutput } from './core/captured-output.js';
 import { executeCommand } from './core/execute-command.js';
+import { runCtxRun } from './core/run-ctx-run.js';
 import type {
   StoredOutput,
   StoreOutputInput,
@@ -15,6 +16,7 @@ const ctxRunInputSchema = z.object({
 interface MiniSandboxServerDependencies {
   projectId: string;
   sessionId: string;
+  emergencyPreviewBytes?: number;
   runCommand?: (command: string) => Promise<CapturedOutput>;
   storeOutput: (input: StoreOutputInput) => StoredOutput;
 }
@@ -22,6 +24,7 @@ interface MiniSandboxServerDependencies {
 export function createMiniSandboxServer({
   projectId,
   sessionId,
+  emergencyPreviewBytes = 2 * 1024,
   runCommand = executeCommand,
   storeOutput,
 }: MiniSandboxServerDependencies): McpServer {
@@ -37,30 +40,20 @@ export function createMiniSandboxServer({
       inputSchema: ctxRunInputSchema,
     },
     async ({ command }) => {
-      const captured = await runCommand(command);
-      const stored = storeOutput({
+      const result = await runCtxRun(command, {
         projectId,
         sessionId,
-        source: 'ctx_run',
-        toolInput: command,
-        rawOutput: captured.rawOutput,
-        stdout: captured.stdout,
-        stderr: captured.stderr,
-        exitCode: captured.exitCode,
-        signal: captured.signal,
+        emergencyPreviewBytes,
+        runCommand,
+        storeOutput,
       });
 
       return {
+        isError: result.isError,
         content: [
           {
             type: 'text',
-            text: [
-              `handle: ${stored.handle}`,
-              `bytes: ${stored.byteCount}`,
-              `exitCode: ${captured.exitCode ?? 'null'}`,
-              'preview:',
-              stored.preview,
-            ].join('\n'),
+            text: result.text,
           },
         ],
       };
