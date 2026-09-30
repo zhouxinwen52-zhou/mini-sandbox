@@ -78,4 +78,46 @@ describe('SqliteOutputStore', () => {
     ]);
     database.close();
   });
+
+  test('rolls back the record and earlier chunks when indexing fails', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_rollback',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+
+    database.exec(`
+      DROP TABLE output_chunks;
+      CREATE TABLE output_chunks (
+        handle TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL CHECK (content NOT LIKE '%gamma%')
+      );
+    `);
+
+    expect(() => store.save(record)).toThrow();
+    expect(store.findByHandle(record.handle)).toBeUndefined();
+    expect(
+      database
+        .prepare('SELECT COUNT(*) AS count FROM output_chunks')
+        .get(),
+    ).toEqual({ count: 0 });
+    database.close();
+  });
 });

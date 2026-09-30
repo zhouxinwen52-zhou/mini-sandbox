@@ -66,33 +66,37 @@ export class SqliteOutputStore implements OutputStore {
       this.chunking.overlapLines,
     );
 
-    this.database
-      .prepare(
-        `INSERT INTO outputs (
-          handle, project_id, session_id, source, tool_input, raw_output,
-          stdout, stderr, exit_code, signal, byte_count, created_at
-        ) VALUES (
-          @handle, @projectId, @sessionId, @source, @toolInput, @rawOutput,
-          @stdout, @stderr, @exitCode, @signal, @byteCount, @createdAt
-        )`,
-      )
-      .run(record);
+    const saveRecordAndChunks = this.database.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO outputs (
+            handle, project_id, session_id, source, tool_input, raw_output,
+            stdout, stderr, exit_code, signal, byte_count, created_at
+          ) VALUES (
+            @handle, @projectId, @sessionId, @source, @toolInput, @rawOutput,
+            @stdout, @stderr, @exitCode, @signal, @byteCount, @createdAt
+          )`,
+        )
+        .run(record);
 
-    const insertChunk = this.database.prepare(
-      `INSERT INTO output_chunks (
-        handle, project_id, session_id, chunk_index, content
-      ) VALUES (?, ?, ?, ?, ?)`,
-    );
-
-    for (const [chunkIndex, content] of chunks.entries()) {
-      insertChunk.run(
-        record.handle,
-        record.projectId,
-        record.sessionId,
-        chunkIndex,
-        content,
+      const insertChunk = this.database.prepare(
+        `INSERT INTO output_chunks (
+          handle, project_id, session_id, chunk_index, content
+        ) VALUES (?, ?, ?, ?, ?)`,
       );
-    }
+
+      for (const [chunkIndex, content] of chunks.entries()) {
+        insertChunk.run(
+          record.handle,
+          record.projectId,
+          record.sessionId,
+          chunkIndex,
+          content,
+        );
+      }
+    });
+
+    saveRecordAndChunks();
   }
 
   public findByHandle(handle: string): OutputRecord | undefined {
