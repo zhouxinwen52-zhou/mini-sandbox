@@ -36,4 +36,131 @@ describe('SqliteOutputStore', () => {
     expect(store.findByHandle('out_missing')).toBeUndefined();
     database.close();
   });
+
+  test('indexes ordered chunks for FTS5 search', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_searchable',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+
+    store.save(record);
+
+    const rows = database
+      .prepare(
+        `SELECT handle, chunk_index AS chunkIndex, content
+         FROM output_chunks
+         WHERE output_chunks MATCH ?
+         ORDER BY chunk_index`,
+      )
+      .all('gamma');
+
+    expect(rows).toEqual([
+      {
+        handle: 'out_searchable',
+        chunkIndex: 1,
+        content: 'beta\ngamma',
+      },
+    ]);
+    database.close();
+  });
+
+  test('rolls back the record and earlier chunks when indexing fails', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_rollback',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+
+    database.exec(`
+      DROP TABLE output_chunks;
+      CREATE TABLE output_chunks (
+        handle TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL CHECK (content NOT LIKE '%gamma%')
+      );
+    `);
+
+    expect(() => store.save(record)).toThrow();
+    expect(store.findByHandle(record.handle)).toBeUndefined();
+    expect(
+      database
+        .prepare('SELECT COUNT(*) AS count FROM output_chunks')
+        .get(),
+    ).toEqual({ count: 0 });
+    database.close();
+  });
+
+  test('rebuilds the derived search index from raw output records', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_reindex',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+    const search = database.prepare(
+      `SELECT handle, chunk_index AS chunkIndex, content
+       FROM output_chunks
+       WHERE output_chunks MATCH ?
+       ORDER BY chunk_index`,
+    );
+
+    store.save(record);
+    database.exec('DELETE FROM output_chunks');
+    expect(search.all('gamma')).toEqual([]);
+
+    store.reindex();
+
+    expect(search.all('gamma')).toEqual([
+      {
+        handle: 'out_reindex',
+        chunkIndex: 1,
+        content: 'beta\ngamma',
+      },
+    ]);
+    database.close();
+  });
 });
