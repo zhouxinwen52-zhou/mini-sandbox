@@ -1,6 +1,17 @@
 import type Database from 'better-sqlite3';
 
 import type { OutputRecord, OutputStore } from '../core/output-record.js';
+import { splitText } from '../core/split-text.js';
+
+export interface OutputChunkingOptions {
+  maxBytes: number;
+  overlapLines: number;
+}
+
+const DEFAULT_CHUNKING_OPTIONS: OutputChunkingOptions = {
+  maxBytes: 4 * 1024,
+  overlapLines: 1,
+};
 
 interface OutputRow {
   handle: string;
@@ -18,7 +29,10 @@ interface OutputRow {
 }
 
 export class SqliteOutputStore implements OutputStore {
-  public constructor(private readonly database: Database.Database) {
+  public constructor(
+    private readonly database: Database.Database,
+    private readonly chunking: OutputChunkingOptions = DEFAULT_CHUNKING_OPTIONS,
+  ) {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS outputs (
         handle TEXT PRIMARY KEY,
@@ -33,11 +47,25 @@ export class SqliteOutputStore implements OutputStore {
         signal TEXT,
         byte_count INTEGER NOT NULL,
         created_at TEXT NOT NULL
-      )
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS output_chunks USING fts5(
+        handle UNINDEXED,
+        project_id UNINDEXED,
+        session_id UNINDEXED,
+        chunk_index UNINDEXED,
+        content
+      );
     `);
   }
 
   public save(record: OutputRecord): void {
+    const chunks = splitText(
+      record.rawOutput,
+      this.chunking.maxBytes,
+      this.chunking.overlapLines,
+    );
+
     this.database
       .prepare(
         `INSERT INTO outputs (
@@ -49,6 +77,22 @@ export class SqliteOutputStore implements OutputStore {
         )`,
       )
       .run(record);
+
+    const insertChunk = this.database.prepare(
+      `INSERT INTO output_chunks (
+        handle, project_id, session_id, chunk_index, content
+      ) VALUES (?, ?, ?, ?, ?)`,
+    );
+
+    for (const [chunkIndex, content] of chunks.entries()) {
+      insertChunk.run(
+        record.handle,
+        record.projectId,
+        record.sessionId,
+        chunkIndex,
+        content,
+      );
+    }
   }
 
   public findByHandle(handle: string): OutputRecord | undefined {

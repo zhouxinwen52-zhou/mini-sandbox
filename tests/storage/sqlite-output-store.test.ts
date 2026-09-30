@@ -36,4 +36,46 @@ describe('SqliteOutputStore', () => {
     expect(store.findByHandle('out_missing')).toBeUndefined();
     database.close();
   });
+
+  test('indexes ordered chunks for FTS5 search', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_searchable',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+
+    store.save(record);
+
+    const rows = database
+      .prepare(
+        `SELECT handle, chunk_index AS chunkIndex, content
+         FROM output_chunks
+         WHERE output_chunks MATCH ?
+         ORDER BY chunk_index`,
+      )
+      .all('gamma');
+
+    expect(rows).toEqual([
+      {
+        handle: 'out_searchable',
+        chunkIndex: 1,
+        content: 'beta\ngamma',
+      },
+    ]);
+    database.close();
+  });
 });
