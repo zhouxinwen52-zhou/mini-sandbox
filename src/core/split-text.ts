@@ -51,6 +51,48 @@ function splitByCharacters(text: string, maxBytes: number): string[] {
   return mergeWithinBudget(characters, maxBytes);
 }
 
+function trailingCompleteLines(chunk: string, lineCount: number): string[] {
+  if (lineCount === 0) {
+    return [];
+  }
+
+  const completeText = chunk.slice(0, chunk.lastIndexOf('\n') + 1);
+  if (completeText === '') {
+    return [];
+  }
+
+  return completeText.split('\n').slice(0, -1).slice(-lineCount);
+}
+
+function addLineOverlap(
+  chunks: string[],
+  maxBytes: number,
+  overlapLines: number,
+): string[] {
+  return chunks.map((chunk, index) => {
+    if (index === 0) {
+      return chunk;
+    }
+
+    const previous = chunks[index - 1];
+    if (previous === undefined) {
+      return chunk;
+    }
+
+    const overlap = trailingCompleteLines(previous, overlapLines);
+    while (overlap.length > 0) {
+      const prefix = `${overlap.join('\n')}\n`;
+      if (utf8ByteLength(prefix + chunk) <= maxBytes) {
+        return prefix + chunk;
+      }
+
+      overlap.shift();
+    }
+
+    return chunk;
+  });
+}
+
 function splitRecursively(
   text: string,
   maxBytes: number,
@@ -74,7 +116,11 @@ function splitRecursively(
   return mergeWithinBudget(parts, maxBytes);
 }
 
-export function splitText(text: string, maxBytes: number): string[] {
+export function splitText(
+  text: string,
+  maxBytes: number,
+  overlapLines = 0,
+): string[] {
   if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
     throw new RangeError('maxBytes must be a positive integer');
   }
@@ -83,5 +129,6 @@ export function splitText(text: string, maxBytes: number): string[] {
     return [];
   }
 
-  return splitRecursively(text, maxBytes, 0);
+  const chunks = splitRecursively(text, maxBytes, 0);
+  return addLineOverlap(chunks, maxBytes, overlapLines);
 }

@@ -26,4 +26,11 @@ describe('splitText', () => {
     expect(chunks.join('')).toBe('A中🚀B');
     expect(chunks.join('')).not.toContain('�');
   });
+
+  test('overlaps the last complete line when it fits the byte budget', () => {
+    expect(splitText('alpha\nbeta\ngamma', 11, 1)).toEqual([
+      'alpha\nbeta\n',
+      'beta\ngamma',
+    ]);
+  });
 });
