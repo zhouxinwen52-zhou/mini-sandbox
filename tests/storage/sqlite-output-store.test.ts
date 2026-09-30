@@ -120,4 +120,47 @@ describe('SqliteOutputStore', () => {
     ).toEqual({ count: 0 });
     database.close();
   });
+
+  test('rebuilds the derived search index from raw output records', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 11,
+      overlapLines: 1,
+    });
+    const record: OutputRecord = {
+      handle: 'out_reindex',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'alpha\nbeta\ngamma',
+      stdout: 'alpha\nbeta\ngamma',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 16,
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+    const search = database.prepare(
+      `SELECT handle, chunk_index AS chunkIndex, content
+       FROM output_chunks
+       WHERE output_chunks MATCH ?
+       ORDER BY chunk_index`,
+    );
+
+    store.save(record);
+    database.exec('DELETE FROM output_chunks');
+    expect(search.all('gamma')).toEqual([]);
+
+    store.reindex();
+
+    expect(search.all('gamma')).toEqual([
+      {
+        handle: 'out_reindex',
+        chunkIndex: 1,
+        content: 'beta\ngamma',
+      },
+    ]);
+    database.close();
+  });
 });

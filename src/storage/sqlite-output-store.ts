@@ -28,6 +28,13 @@ interface OutputRow {
   created_at: string;
 }
 
+interface ReindexRow {
+  handle: string;
+  project_id: string;
+  session_id: string;
+  raw_output: string;
+}
+
 export class SqliteOutputStore implements OutputStore {
   public constructor(
     private readonly database: Database.Database,
@@ -122,5 +129,49 @@ export class SqliteOutputStore implements OutputStore {
       byteCount: row.byte_count,
       createdAt: row.created_at,
     };
+  }
+
+  public reindex(): void {
+    const rows = this.database
+      .prepare(
+        `SELECT handle, project_id, session_id, raw_output
+         FROM outputs
+         ORDER BY created_at, handle`,
+      )
+      .all() as ReindexRow[];
+    const indexedRecords = rows.map((row) => ({
+      handle: row.handle,
+      projectId: row.project_id,
+      sessionId: row.session_id,
+      chunks: splitText(
+        row.raw_output,
+        this.chunking.maxBytes,
+        this.chunking.overlapLines,
+      ),
+    }));
+
+    const rebuildIndex = this.database.transaction(() => {
+      this.database.exec('DELETE FROM output_chunks');
+
+      const insertChunk = this.database.prepare(
+        `INSERT INTO output_chunks (
+          handle, project_id, session_id, chunk_index, content
+        ) VALUES (?, ?, ?, ?, ?)`,
+      );
+
+      for (const record of indexedRecords) {
+        for (const [chunkIndex, content] of record.chunks.entries()) {
+          insertChunk.run(
+            record.handle,
+            record.projectId,
+            record.sessionId,
+            chunkIndex,
+            content,
+          );
+        }
+      }
+    });
+
+    rebuildIndex();
   }
 }
