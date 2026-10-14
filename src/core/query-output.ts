@@ -69,6 +69,33 @@ function applyQueryBudget(text: string, budgetBytes: number): QueryOutputResult 
   };
 }
 
+function applySnippetBudget(
+  snippet: string,
+  budgetBytes: number,
+): QueryOutputResult {
+  if (utf8ByteLength(snippet) <= budgetBytes) {
+    return { text: snippet, truncated: false };
+  }
+
+  const highlightStart = snippet.indexOf('[');
+  const highlightEnd = snippet.indexOf(']', highlightStart + 1);
+  const markerBytes = utf8ByteLength(TRUNCATION_MARKER);
+
+  if (highlightStart > 0 && highlightEnd > highlightStart) {
+    const highlighted = snippet.slice(highlightStart, highlightEnd + 1);
+    if (markerBytes + utf8ByteLength(highlighted) <= budgetBytes) {
+      return {
+        text:
+          TRUNCATION_MARKER +
+          takeUtf8Prefix(snippet.slice(highlightStart), budgetBytes - markerBytes),
+        truncated: true,
+      };
+    }
+  }
+
+  return applyQueryBudget(snippet, budgetBytes);
+}
+
 export function createQueryOutput(
   dependencies: QueryOutputDependencies,
 ): (input: QueryOutputInput) => QueryOutputResult {
@@ -78,17 +105,35 @@ export function createQueryOutput(
       sessionId: dependencies.sessionId,
       ...input,
     });
-    const text = matches
-      .map((match) =>
-        [
-          `handle: ${match.handle}`,
-          `chunk: ${match.chunkIndex}`,
-          'snippet:',
-          match.snippet,
-        ].join('\n'),
-      )
-      .join('\n\n');
+    let text = '';
 
-    return applyQueryBudget(text, dependencies.queryBudgetBytes);
+    for (const match of matches) {
+      const separator = text === '' ? '' : '\n\n';
+      const header = [
+        `handle: ${match.handle}`,
+        `chunk: ${match.chunkIndex}`,
+        'snippet:',
+        '',
+      ].join('\n');
+      const textWithHeader = text + separator + header;
+      const remainingBytes =
+        dependencies.queryBudgetBytes - utf8ByteLength(textWithHeader);
+
+      if (remainingBytes < 0) {
+        return applyQueryBudget(
+          textWithHeader,
+          dependencies.queryBudgetBytes,
+        );
+      }
+
+      const snippet = applySnippetBudget(match.snippet, remainingBytes);
+      text = textWithHeader + snippet.text;
+
+      if (snippet.truncated) {
+        return { text, truncated: true };
+      }
+    }
+
+    return { text, truncated: false };
   };
 }

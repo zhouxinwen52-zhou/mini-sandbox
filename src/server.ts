@@ -79,20 +79,32 @@ export function createMiniSandboxServer({
       inputSchema: ctxQueryInputSchema,
     },
     async ({ query, handle, limit }) => {
-      const result = queryOutput({
-        query,
-        ...(handle === undefined ? {} : { handle }),
-        ...(limit === undefined ? {} : { limit }),
-      });
+      try {
+        const result = queryOutput({
+          query,
+          ...(handle === undefined ? {} : { handle }),
+          ...(limit === undefined ? {} : { limit }),
+        });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: result.text,
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result.text,
+            },
+          ],
+        };
+      } catch {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'query failed; check FTS5 query syntax',
+            },
+          ],
+        };
+      }
     },
   );
 

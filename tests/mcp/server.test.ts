@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, test } from 'vitest';
 
+import { utf8ByteLength } from '../../src/core/utf8-byte-length.js';
 import { openProjectDatabase } from '../../src/storage/project-database.js';
 import { SqliteOutputStore } from '../../src/storage/sqlite-output-store.js';
 
@@ -166,5 +167,22 @@ describe('MiniSandbox MCP server', () => {
         text: expect.stringContaining('[middlemarker]'),
       },
     ]);
+  });
+
+  test('returns a bounded tool error for invalid FTS5 query syntax', async () => {
+    const connectedClient = await connectClient();
+
+    const result = await connectedClient.callTool({
+      name: 'ctx_query',
+      arguments: { query: `${'x'.repeat(5_000)}:needle` },
+    });
+
+    expect(result.isError).toBe(true);
+    const content = result.content[0];
+    expect(content?.type).toBe('text');
+    if (content?.type !== 'text') {
+      throw new Error('ctx_query did not return text content');
+    }
+    expect(utf8ByteLength(content.text)).toBeLessThanOrEqual(4 * 1024);
   });
 });

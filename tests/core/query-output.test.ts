@@ -84,4 +84,27 @@ describe('QueryOutput', () => {
     expect(result.text).not.toContain('out_second');
     expect(result.text).not.toContain('�');
   });
+
+  test('keeps the highlighted match when preceding snippet context exceeds the budget', () => {
+    const queryOutput = createQueryOutput({
+      projectId: 'project-abc',
+      sessionId: 'session-current',
+      queryBudgetBytes: 100,
+      search: () => [
+        {
+          handle: 'out_match-at-end',
+          chunkIndex: 0,
+          snippet: `alpha${' '.repeat(200)}[needle]`,
+          score: -1,
+        },
+      ],
+    });
+
+    const result = queryOutput({ query: 'needle' });
+
+    expect(utf8ByteLength(result.text)).toBeLessThanOrEqual(100);
+    expect(result.text).toContain('handle: out_match-at-end');
+    expect(result.text).toContain('[needle]');
+    expect(result.truncated).toBe(true);
+  });
 });
