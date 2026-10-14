@@ -12,12 +12,14 @@ export interface SearchOutputChunksInput {
   projectId: string;
   sessionId: string;
   query: string;
+  handle?: string;
+  limit?: number;
 }
 
 export interface OutputChunkSearchResult {
   handle: string;
   chunkIndex: number;
-  content: string;
+  snippet: string;
   score: number;
 }
 
@@ -152,15 +154,23 @@ export class SqliteOutputStore implements OutputStore {
         `SELECT
            handle,
            chunk_index AS chunkIndex,
-           content,
+           snippet(output_chunks, 4, '[', ']', ' … ', 16) AS snippet,
            bm25(output_chunks) AS score
          FROM output_chunks
          WHERE output_chunks MATCH @query
            AND project_id = @projectId
-           AND session_id = @sessionId
-         ORDER BY score ASC, handle ASC, chunk_index ASC`,
+           AND (
+             (@handle IS NULL AND session_id = @sessionId)
+             OR handle = @handle
+           )
+         ORDER BY score ASC, handle ASC, chunk_index ASC
+         LIMIT @limit`,
       )
-      .all(input) as OutputChunkSearchResult[];
+      .all({
+        ...input,
+        handle: input.handle ?? null,
+        limit: input.limit ?? 10,
+      }) as OutputChunkSearchResult[];
   }
 
   public reindex(): void {

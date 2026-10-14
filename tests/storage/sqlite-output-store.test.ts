@@ -217,4 +217,69 @@ describe('SqliteOutputStore', () => {
     expect(results.every(({ score }) => score < 0)).toBe(true);
     database.close();
   });
+
+  test('an exact handle can search a historical session and respects the limit', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database, {
+      maxBytes: 12,
+      overlapLines: 0,
+    });
+    const record: OutputRecord = {
+      handle: 'out_historical',
+      projectId: 'project-abc',
+      sessionId: 'session-historical',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput: 'needle one\nneedle two',
+      stdout: 'needle one\nneedle two',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 21,
+      createdAt: '2026-10-14T00:00:00.000Z',
+    };
+    store.save(record);
+
+    const results = store.search({
+      projectId: 'project-abc',
+      sessionId: 'session-current',
+      handle: 'out_historical',
+      query: 'needle',
+      limit: 1,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.handle).toBe('out_historical');
+    database.close();
+  });
+
+  test('returns an FTS5 snippet with highlighted matches', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    const rawOutput = 'alpha needle omega';
+    store.save({
+      handle: 'out_snippet',
+      projectId: 'project-abc',
+      sessionId: 'session-current',
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: Buffer.byteLength(rawOutput, 'utf8'),
+      createdAt: '2026-10-14T00:00:00.000Z',
+    });
+
+    const [result] = store.search({
+      projectId: 'project-abc',
+      sessionId: 'session-current',
+      query: 'needle',
+    });
+
+    expect(result?.snippet).toBe('alpha [needle] omega');
+    expect(result).not.toHaveProperty('content');
+    database.close();
+  });
 });
