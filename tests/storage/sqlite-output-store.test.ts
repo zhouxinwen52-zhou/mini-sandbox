@@ -163,4 +163,58 @@ describe('SqliteOutputStore', () => {
     ]);
     database.close();
   });
+
+  test('searches only the current session and ranks matches by BM25 relevance', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    const createRecord = (
+      handle: string,
+      sessionId: string,
+      rawOutput: string,
+    ): OutputRecord => ({
+      handle,
+      projectId: 'project-abc',
+      sessionId,
+      source: 'ctx_run',
+      toolInput: 'printf logs',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: Buffer.byteLength(rawOutput, 'utf8'),
+      createdAt: '2026-10-14T00:00:00.000Z',
+    });
+
+    store.save(
+      createRecord('out_less-relevant', 'session-current', 'needle nearby'),
+    );
+    store.save(
+      createRecord(
+        'out_more-relevant',
+        'session-current',
+        'needle needle needle nearby',
+      ),
+    );
+    store.save(
+      createRecord(
+        'out_other-session',
+        'session-other',
+        'needle needle needle needle',
+      ),
+    );
+
+    const results = store.search({
+      projectId: 'project-abc',
+      sessionId: 'session-current',
+      query: 'needle',
+    });
+
+    expect(results.map(({ handle }) => handle)).toEqual([
+      'out_more-relevant',
+      'out_less-relevant',
+    ]);
+    expect(results.every(({ score }) => score < 0)).toBe(true);
+    database.close();
+  });
 });
