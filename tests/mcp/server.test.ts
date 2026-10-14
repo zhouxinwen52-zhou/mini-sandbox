@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, test } from 'vitest';
 
+import { utf8ByteLength } from '../../src/core/utf8-byte-length.js';
 import { openProjectDatabase } from '../../src/storage/project-database.js';
 import { SqliteOutputStore } from '../../src/storage/sqlite-output-store.js';
 
@@ -48,17 +49,26 @@ afterEach(async () => {
 });
 
 describe('MiniSandbox MCP server', () => {
-  test('registers only the ctx_run tool after initialization', async () => {
+  test('registers ctx_run and ctx_query after initialization', async () => {
     const connectedClient = await connectClient();
 
     const { tools } = await connectedClient.listTools();
 
-    expect(tools.map((tool) => tool.name)).toEqual(['ctx_run']);
+    expect(tools.map((tool) => tool.name)).toEqual(['ctx_run', 'ctx_query']);
     expect(tools[0]?.inputSchema).toMatchObject({
       type: 'object',
       required: ['command'],
       properties: {
         command: { type: 'string' },
+      },
+    });
+    expect(tools[1]?.inputSchema).toMatchObject({
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'string' },
+        handle: { type: 'string' },
+        limit: { type: 'integer' },
       },
     });
   });
@@ -128,5 +138,51 @@ describe('MiniSandbox MCP server', () => {
     });
 
     expect(result.isError).toBe(true);
+  });
+
+  test('retrieves relevant middle content absent from the ctx_run preview', async () => {
+    const connectedClient = await connectClient();
+    const command = `${process.execPath} -e "process.stdout.write('head '.repeat(700) + '\\nmiddlemarker\\n' + 'tail '.repeat(700))"`;
+
+    const runResult = await connectedClient.callTool({
+      name: 'ctx_run',
+      arguments: { command },
+    });
+    const runContent = runResult.content[0];
+    expect(runContent?.type).toBe('text');
+    if (runContent?.type !== 'text') {
+      throw new Error('ctx_run did not return text content');
+    }
+    expect(runContent.text).not.toContain('middlemarker');
+
+    const queryResult = await connectedClient.callTool({
+      name: 'ctx_query',
+      arguments: { query: 'middlemarker' },
+    });
+
+    expect(queryResult.isError).not.toBe(true);
+    expect(queryResult.content).toEqual([
+      {
+        type: 'text',
+        text: expect.stringContaining('[middlemarker]'),
+      },
+    ]);
+  });
+
+  test('returns a bounded tool error for invalid FTS5 query syntax', async () => {
+    const connectedClient = await connectClient();
+
+    const result = await connectedClient.callTool({
+      name: 'ctx_query',
+      arguments: { query: `${'x'.repeat(5_000)}:needle` },
+    });
+
+    expect(result.isError).toBe(true);
+    const content = result.content[0];
+    expect(content?.type).toBe('text');
+    if (content?.type !== 'text') {
+      throw new Error('ctx_query did not return text content');
+    }
+    expect(utf8ByteLength(content.text)).toBeLessThanOrEqual(4 * 1024);
   });
 });

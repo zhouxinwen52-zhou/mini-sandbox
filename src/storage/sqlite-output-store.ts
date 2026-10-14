@@ -8,6 +8,21 @@ export interface OutputChunkingOptions {
   overlapLines: number;
 }
 
+export interface SearchOutputChunksInput {
+  projectId: string;
+  sessionId: string;
+  query: string;
+  handle?: string;
+  limit?: number;
+}
+
+export interface OutputChunkSearchResult {
+  handle: string;
+  chunkIndex: number;
+  snippet: string;
+  score: number;
+}
+
 const DEFAULT_CHUNKING_OPTIONS: OutputChunkingOptions = {
   maxBytes: 4 * 1024,
   overlapLines: 1,
@@ -129,6 +144,33 @@ export class SqliteOutputStore implements OutputStore {
       byteCount: row.byte_count,
       createdAt: row.created_at,
     };
+  }
+
+  public search(
+    input: SearchOutputChunksInput,
+  ): OutputChunkSearchResult[] {
+    return this.database
+      .prepare(
+        `SELECT
+           handle,
+           chunk_index AS chunkIndex,
+           snippet(output_chunks, 4, '[', ']', ' … ', 16) AS snippet,
+           bm25(output_chunks) AS score
+         FROM output_chunks
+         WHERE output_chunks MATCH @query
+           AND project_id = @projectId
+           AND (
+             (@handle IS NULL AND session_id = @sessionId)
+             OR handle = @handle
+           )
+         ORDER BY score ASC, handle ASC, chunk_index ASC
+         LIMIT @limit`,
+      )
+      .all({
+        ...input,
+        handle: input.handle ?? null,
+        limit: input.limit ?? 10,
+      }) as OutputChunkSearchResult[];
   }
 
   public reindex(): void {
