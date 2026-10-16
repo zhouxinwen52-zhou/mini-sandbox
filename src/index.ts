@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import { loadConfig } from './config/config.js';
+import { findProjectRoot } from './core/find-project-root.js';
 import { createQueryOutput } from './core/query-output.js';
 import { createStoreOutput } from './core/store-output.js';
 import { createMiniSandboxServer } from './server.js';
@@ -16,7 +17,8 @@ const dataDirectory =
 const sessionId =
   process.env.MINI_SANDBOX_SESSION_ID ?? `session_${randomUUID()}`;
 const config = loadConfig();
-const project = openProjectDatabase(dataDirectory, process.cwd());
+const projectRoot = findProjectRoot(process.cwd());
+const project = openProjectDatabase(dataDirectory, projectRoot);
 const store = new SqliteOutputStore(project.database);
 const storeOutput = createStoreOutput({
   store,
