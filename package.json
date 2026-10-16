@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "A learning-focused MCP server for sandboxing large tool outputs.",
+  "bin": {
+    "mini-sandbox": "dist/cli.js"
+  },
   "engines": {
     "node": ">=22"
   },

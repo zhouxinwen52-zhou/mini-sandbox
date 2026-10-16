@@ -7,6 +7,7 @@ import type {
   QueryOutputInput,
   QueryOutputResult,
 } from './core/query-output.js';
+import { createOutputPreview } from './core/output-preview.js';
 import { runCtxRun } from './core/run-ctx-run.js';
 import type {
   StoredOutput,
@@ -27,6 +28,7 @@ interface MiniSandboxServerDependencies {
   projectId: string;
   sessionId: string;
   emergencyPreviewBytes?: number;
+  queryBudgetBytes?: number;
   runCommand?: (command: string) => Promise<CapturedOutput>;
   storeOutput: (input: StoreOutputInput) => StoredOutput;
   queryOutput: (input: QueryOutputInput) => QueryOutputResult;
@@ -36,6 +38,7 @@ export function createMiniSandboxServer({
   projectId,
   sessionId,
   emergencyPreviewBytes = 2 * 1024,
+  queryBudgetBytes = 4 * 1024,
   runCommand = executeCommand,
   storeOutput,
   queryOutput,
@@ -95,12 +98,16 @@ export function createMiniSandboxServer({
           ],
         };
       } catch {
+        const errorText = createOutputPreview(
+          'query failed; check FTS5 query syntax',
+          queryBudgetBytes,
+        ).text;
         return {
           isError: true,
           content: [
             {
               type: 'text',
-              text: 'query failed; check FTS5 query syntax',
+              text: errorText,
             },
           ],
         };

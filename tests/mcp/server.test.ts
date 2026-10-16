@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, test } from 'vitest';
 
+import type { MiniSandboxConfig } from '../../src/config/config.js';
 import { utf8ByteLength } from '../../src/core/utf8-byte-length.js';
 import { openProjectDatabase } from '../../src/storage/project-database.js';
 import { SqliteOutputStore } from '../../src/storage/sqlite-output-store.js';
@@ -19,8 +20,16 @@ const serverEntry = fileURLToPath(new URL('../../src/index.ts', import.meta.url)
 let client: Client | undefined;
 let dataDirectory: string | undefined;
 
-async function connectClient(): Promise<Client> {
+async function connectClient(
+  config?: Partial<MiniSandboxConfig>,
+): Promise<Client> {
   dataDirectory = mkdtempSync(join(tmpdir(), 'mini-sandbox-mcp-'));
+  const homeDirectory = join(dataDirectory, 'home');
+  if (config !== undefined) {
+    const configDirectory = join(homeDirectory, '.mini-sandbox');
+    mkdirSync(configDirectory, { recursive: true });
+    writeFileSync(join(configDirectory, 'config.json'), JSON.stringify(config));
+  }
   client = new Client({ name: 'mini-sandbox-test-client', version: '0.1.0' });
 
   await client.connect(
@@ -31,6 +40,7 @@ async function connectClient(): Promise<Client> {
         ...getDefaultEnvironment(),
         MINI_SANDBOX_DATA_DIR: dataDirectory,
         MINI_SANDBOX_SESSION_ID: 'mcp-test-session',
+        HOME: homeDirectory,
       },
       stderr: 'pipe',
     }),
@@ -170,7 +180,7 @@ describe('MiniSandbox MCP server', () => {
   });
 
   test('returns a bounded tool error for invalid FTS5 query syntax', async () => {
-    const connectedClient = await connectClient();
+    const connectedClient = await connectClient({ queryBudgetBytes: 16 });
 
     const result = await connectedClient.callTool({
       name: 'ctx_query',
@@ -183,6 +193,6 @@ describe('MiniSandbox MCP server', () => {
     if (content?.type !== 'text') {
       throw new Error('ctx_query did not return text content');
     }
-    expect(utf8ByteLength(content.text)).toBeLessThanOrEqual(4 * 1024);
+    expect(utf8ByteLength(content.text)).toBeLessThanOrEqual(16);
   });
 });

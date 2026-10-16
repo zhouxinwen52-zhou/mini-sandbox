@@ -35,4 +35,37 @@ describe('openProjectDatabase', () => {
     second.database.close();
     rmSync(dataDirectory, { recursive: true, force: true });
   });
+
+  test('configures connections for shared access', () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), 'mini-sandbox-'));
+    const project = openProjectDatabase(dataDirectory, '/projects/example');
+
+    expect(project.database.pragma('journal_mode', { simple: true })).toBe(
+      'wal',
+    );
+    expect(project.database.pragma('busy_timeout', { simple: true })).toBe(
+      5000,
+    );
+
+    project.database.close();
+    rmSync(dataDirectory, { recursive: true, force: true });
+  });
+
+  test('allows two connections to perform basic writes', () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), 'mini-sandbox-'));
+    const first = openProjectDatabase(dataDirectory, '/projects/example');
+    const second = openProjectDatabase(dataDirectory, '/projects/example');
+    first.database.exec('CREATE TABLE shared_writes (value TEXT NOT NULL)');
+
+    first.database.prepare('INSERT INTO shared_writes VALUES (?)').run('one');
+    second.database.prepare('INSERT INTO shared_writes VALUES (?)').run('two');
+
+    expect(
+      first.database.prepare('SELECT value FROM shared_writes ORDER BY value').all(),
+    ).toEqual([{ value: 'one' }, { value: 'two' }]);
+
+    first.database.close();
+    second.database.close();
+    rmSync(dataDirectory, { recursive: true, force: true });
+  });
 });
