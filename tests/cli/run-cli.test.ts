@@ -36,6 +36,64 @@ describe('runCli', () => {
     database.close();
   });
 
+  test('purges the store for the purge command', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    store.save({
+      handle: 'out_cli-purge',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf hello',
+      rawOutput: 'hello',
+      stdout: 'hello',
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: 5,
+      createdAt: '2026-10-16T00:00:00.000Z',
+    });
+
+    expect(runCli(['purge'], store)).toBe('Purged stored outputs.');
+    expect(store.stats()).toEqual({
+      outputCount: 0,
+      rawOutputBytes: 0,
+      chunkCount: 0,
+    });
+    database.close();
+  });
+
+  test('rebuilds search chunks for the reindex command', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    const rawOutput = 'alpha needle omega';
+    store.save({
+      handle: 'out_cli-reindex',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf output',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: Buffer.byteLength(rawOutput, 'utf8'),
+      createdAt: '2026-10-16T00:00:00.000Z',
+    });
+    database.exec('DELETE FROM output_chunks');
+
+    expect(runCli(['reindex'], store)).toBe('Reindexed stored outputs.');
+    expect(
+      store.search({
+        projectId: 'project-abc',
+        sessionId: 'session-def',
+        query: 'needle',
+      }),
+    ).toMatchObject([{ handle: 'out_cli-reindex' }]);
+    database.close();
+  });
+
   test.each([
     { label: 'missing command', args: [] },
     { label: 'unknown command', args: ['unknown'] },
