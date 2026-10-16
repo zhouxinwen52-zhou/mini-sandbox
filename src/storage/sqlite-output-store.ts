@@ -23,6 +23,12 @@ export interface OutputChunkSearchResult {
   score: number;
 }
 
+export interface OutputStoreStats {
+  outputCount: number;
+  rawOutputBytes: number;
+  chunkCount: number;
+}
+
 const DEFAULT_CHUNKING_OPTIONS: OutputChunkingOptions = {
   maxBytes: 4 * 1024,
   overlapLines: 1,
@@ -144,6 +150,17 @@ export class SqliteOutputStore implements OutputStore {
       byteCount: row.byte_count,
       createdAt: row.created_at,
     };
+  }
+
+  public stats(): OutputStoreStats {
+    return this.database
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM outputs) AS outputCount,
+           (SELECT COALESCE(SUM(byte_count), 0) FROM outputs) AS rawOutputBytes,
+           (SELECT COUNT(*) FROM output_chunks) AS chunkCount`,
+      )
+      .get() as OutputStoreStats;
   }
 
   public search(

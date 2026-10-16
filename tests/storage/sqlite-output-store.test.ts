@@ -37,6 +37,50 @@ describe('SqliteOutputStore', () => {
     database.close();
   });
 
+  test('reports stored output and index statistics', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    const createRecord = (
+      handle: string,
+      rawOutput: string,
+      byteCount: number,
+    ): OutputRecord => ({
+      handle,
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf output',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount,
+      createdAt: '2026-10-16T00:00:00.000Z',
+    });
+    store.save(createRecord('out_one', 'hello', 5));
+    store.save(createRecord('out_two', '中', 3));
+
+    expect(store.stats()).toEqual({
+      outputCount: 2,
+      rawOutputBytes: 8,
+      chunkCount: 2,
+    });
+    database.close();
+  });
+
+  test('reports zero statistics for an empty store', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+
+    expect(store.stats()).toEqual({
+      outputCount: 0,
+      rawOutputBytes: 0,
+      chunkCount: 0,
+    });
+    database.close();
+  });
+
   test('indexes ordered chunks for FTS5 search', () => {
     const database = new Database(':memory:');
     const store = new SqliteOutputStore(database, {
