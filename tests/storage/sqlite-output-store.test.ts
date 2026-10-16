@@ -81,6 +81,43 @@ describe('SqliteOutputStore', () => {
     database.close();
   });
 
+  test('purges raw output records and derived index chunks', () => {
+    const database = new Database(':memory:');
+    const store = new SqliteOutputStore(database);
+    const rawOutput = 'alpha needle omega';
+    store.save({
+      handle: 'out_purge',
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf output',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: Buffer.byteLength(rawOutput, 'utf8'),
+      createdAt: '2026-10-16T00:00:00.000Z',
+    });
+
+    store.purge();
+
+    expect(store.findByHandle('out_purge')).toBeUndefined();
+    expect(
+      store.search({
+        projectId: 'project-abc',
+        sessionId: 'session-def',
+        query: 'needle',
+      }),
+    ).toEqual([]);
+    expect(store.stats()).toEqual({
+      outputCount: 0,
+      rawOutputBytes: 0,
+      chunkCount: 0,
+    });
+    database.close();
+  });
+
   test('indexes ordered chunks for FTS5 search', () => {
     const database = new Database(':memory:');
     const store = new SqliteOutputStore(database, {

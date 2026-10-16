@@ -163,6 +163,15 @@ export class SqliteOutputStore implements OutputStore {
       .get() as OutputStoreStats;
   }
 
+  public purge(): void {
+    this.database.transaction(() => {
+      this.database.exec(`
+        DELETE FROM output_chunks;
+        DELETE FROM outputs;
+      `);
+    })();
+  }
+
   public search(
     input: SearchOutputChunksInput,
   ): OutputChunkSearchResult[] {
