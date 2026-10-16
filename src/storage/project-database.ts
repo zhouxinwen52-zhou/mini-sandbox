@@ -22,9 +22,12 @@ export function openProjectDatabase(
   const path = join(projectDirectory, 'mini-sandbox.db');
 
   mkdirSync(projectDirectory, { recursive: true });
+  const database = new Database(path);
+  database.pragma('journal_mode = WAL');
+  database.pragma('busy_timeout = 5000');
 
   return {
-    database: new Database(path),
+    database,
     projectId,
     path,
   };
