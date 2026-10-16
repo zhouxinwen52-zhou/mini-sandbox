@@ -33,6 +33,7 @@ const DEFAULT_CHUNKING_OPTIONS: OutputChunkingOptions = {
   maxBytes: 4 * 1024,
   overlapLines: 1,
 };
+const MAX_REINDEX_ATTEMPTS = 3;
 
 interface OutputRow {
   handle: string;
@@ -200,46 +201,70 @@ export class SqliteOutputStore implements OutputStore {
   }
 
   public reindex(): void {
-    const rows = this.database
-      .prepare(
-        `SELECT handle, project_id, session_id, raw_output
-         FROM outputs
-         ORDER BY created_at, handle`,
-      )
-      .all() as ReindexRow[];
-    const indexedRecords = rows.map((row) => ({
-      handle: row.handle,
-      projectId: row.project_id,
-      sessionId: row.session_id,
-      chunks: splitText(
-        row.raw_output,
-        this.chunking.maxBytes,
-        this.chunking.overlapLines,
-      ),
-    }));
+    for (let attempt = 0; attempt < MAX_REINDEX_ATTEMPTS; attempt += 1) {
+      const rows = this.database
+        .prepare(
+          `SELECT handle, project_id, session_id, raw_output
+           FROM outputs
+           ORDER BY created_at, handle`,
+        )
+        .all() as ReindexRow[];
+      const indexedRecords = rows.map((row) => ({
+        handle: row.handle,
+        projectId: row.project_id,
+        sessionId: row.session_id,
+        chunks: splitText(
+          row.raw_output,
+          this.chunking.maxBytes,
+          this.chunking.overlapLines,
+        ),
+      }));
 
-    const rebuildIndex = this.database.transaction(() => {
-      this.database.exec('DELETE FROM output_chunks');
-
-      const insertChunk = this.database.prepare(
-        `INSERT INTO output_chunks (
-          handle, project_id, session_id, chunk_index, content
-        ) VALUES (?, ?, ?, ?, ?)`,
-      );
-
-      for (const record of indexedRecords) {
-        for (const [chunkIndex, content] of record.chunks.entries()) {
-          insertChunk.run(
-            record.handle,
-            record.projectId,
-            record.sessionId,
-            chunkIndex,
-            content,
+      const rebuildIndex = this.database.transaction(() => {
+        const currentHandles = this.database
+          .prepare(
+            `SELECT handle
+             FROM outputs
+             ORDER BY created_at, handle`,
+          )
+          .all() as Array<{ handle: string }>;
+        const snapshotMatches =
+          currentHandles.length === rows.length &&
+          currentHandles.every(
+            (row, index) => row.handle === rows[index]?.handle,
           );
-        }
-      }
-    });
 
-    rebuildIndex();
+        if (!snapshotMatches) {
+          return false;
+        }
+
+        this.database.exec('DELETE FROM output_chunks');
+
+        const insertChunk = this.database.prepare(
+          `INSERT INTO output_chunks (
+            handle, project_id, session_id, chunk_index, content
+          ) VALUES (?, ?, ?, ?, ?)`,
+        );
+
+        for (const record of indexedRecords) {
+          for (const [chunkIndex, content] of record.chunks.entries()) {
+            insertChunk.run(
+              record.handle,
+              record.projectId,
+              record.sessionId,
+              chunkIndex,
+              content,
+            );
+          }
+        }
+        return true;
+      });
+
+      if (rebuildIndex.immediate()) {
+        return;
+      }
+    }
+
+    throw new Error('reindex failed because stored outputs kept changing');
   }
 }

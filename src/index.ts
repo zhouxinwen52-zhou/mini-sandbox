@@ -35,6 +35,7 @@ serveStdio(() =>
   createMiniSandboxServer({
     projectId: project.projectId,
     sessionId,
+    queryBudgetBytes: config.queryBudgetBytes,
     storeOutput,
     queryOutput,
   }),

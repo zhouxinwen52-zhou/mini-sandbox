@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import Database from 'better-sqlite3';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import type { OutputRecord } from '../../src/core/output-record.js';
 import { SqliteOutputStore } from '../../src/storage/sqlite-output-store.js';
@@ -243,6 +247,64 @@ describe('SqliteOutputStore', () => {
       },
     ]);
     database.close();
+  });
+
+  test('preserves output saved by another connection during reindex', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mini-sandbox-reindex-'));
+    const path = join(directory, 'store.db');
+    const firstDatabase = new Database(path);
+    firstDatabase.pragma('journal_mode = WAL');
+    const secondDatabase = new Database(path);
+    secondDatabase.pragma('journal_mode = WAL');
+    const firstStore = new SqliteOutputStore(firstDatabase);
+    const secondStore = new SqliteOutputStore(secondDatabase);
+    const createRecord = (handle: string, rawOutput: string): OutputRecord => ({
+      handle,
+      projectId: 'project-abc',
+      sessionId: 'session-def',
+      source: 'ctx_run',
+      toolInput: 'printf output',
+      rawOutput,
+      stdout: rawOutput,
+      stderr: '',
+      exitCode: 0,
+      signal: null,
+      byteCount: Buffer.byteLength(rawOutput, 'utf8'),
+      createdAt: '2026-10-16T00:00:00.000Z',
+    });
+    firstStore.save(createRecord('out_before-reindex', 'alpha'));
+    const originalPrepare = firstDatabase.prepare.bind(firstDatabase);
+    let hasInterleavedWrite = false;
+    vi.spyOn(firstDatabase, 'prepare').mockImplementation(((sql: string) => {
+      const statement = originalPrepare(sql);
+
+      if (sql.includes('SELECT handle, project_id, session_id, raw_output')) {
+        const originalAll = statement.all.bind(statement);
+        vi.spyOn(statement, 'all').mockImplementation((() => {
+          const rows = originalAll();
+          if (!hasInterleavedWrite) {
+            hasInterleavedWrite = true;
+            secondStore.save(createRecord('out_during-reindex', 'needle'));
+          }
+          return rows;
+        }) as typeof statement.all);
+      }
+
+      return statement;
+    }) as typeof firstDatabase.prepare);
+
+    firstStore.reindex();
+
+    expect(
+      firstStore.search({
+        projectId: 'project-abc',
+        sessionId: 'session-def',
+        query: 'needle',
+      }),
+    ).toMatchObject([{ handle: 'out_during-reindex' }]);
+    firstDatabase.close();
+    secondDatabase.close();
+    rmSync(directory, { recursive: true, force: true });
   });
 
   test('searches only the current session and ranks matches by BM25 relevance', () => {
