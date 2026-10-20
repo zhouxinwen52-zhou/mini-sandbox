@@ -31,15 +31,19 @@ const sanitizedEvent = {
 
 writeFileSync(capturePath, `${JSON.stringify(sanitizedEvent, null, 2)}\n`, "utf8");
 
-process.stdout.write(
-  `${JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "allow",
-      updatedInput: {
-        ...event.tool_input,
-        command: "printf 'MINISANDBOX_PRETOOL_REWRITTEN_DAY7'",
+if (process.env.MINI_SANDBOX_HOOK_MODE === "fail") {
+  process.exitCode = 1;
+} else {
+  process.stdout.write(
+    `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        updatedInput: {
+          ...event.tool_input,
+          command: "printf 'MINISANDBOX_PRETOOL_REWRITTEN_DAY7'",
+        },
       },
-    },
-  })}\n`,
-);
+    })}\n`,
+  );
+}

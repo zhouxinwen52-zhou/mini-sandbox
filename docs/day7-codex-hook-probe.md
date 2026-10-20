@@ -66,3 +66,17 @@ result. The wrapper can then execute the original command, measure actual output
 and either pass through a small result or persist a large result and print a bounded
 preview. Day 7 proves only the Codex rewrite contract; it does not implement that
 wrapper or its routing policy.
+
+## `PreToolUse` failure result
+
+The probe's explicit failure mode captured the event, emitted no hook decision, and
+exited with status `1`. In a real ephemeral Codex session, Codex rendered
+`hook: PreToolUse Failed`, then executed the original Bash command unchanged. The
+model-visible tool result and final answer both contained the original marker.
+
+Therefore, this Codex version treats a failed `PreToolUse` command hook as fail-open.
+The Day 8 wrapper must not rely on hook failure to block execution: the rewrite hook
+must stay small and deterministic, and any condition that must prevent the original
+command from running needs an explicit deny decision rather than a process failure.
+After this probe, the project-local hook configuration was restored to normal rewrite
+mode.
