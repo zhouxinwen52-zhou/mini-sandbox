@@ -1,0 +1,18 @@
+{
+  "description": "Project-local MiniSandbox PostToolUse contract probe.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env MINI_SANDBOX_HOOK_CAPTURE=\"$(git rev-parse --show-toplevel)/.codex/hook-probe-event.json\" MINI_SANDBOX_HOOK_MODE=stop node \"$(git rev-parse --show-toplevel)/dist/codex/hook-probe.js\"",
+            "timeout": 10,
+            "statusMessage": "Running the MiniSandbox PostToolUse probe"
+          }
+        ]
+      }
+    ]
+  }
+}

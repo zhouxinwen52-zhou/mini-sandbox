@@ -4,5 +4,6 @@ coverage/
 .env
 .DS_Store
 .superpowers/
+.codex/hook-probe-event.json
 *.log
 docs/context-mode-architecture.*
