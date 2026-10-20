@@ -1,0 +1,10 @@
+{
+  "session_id": "<redacted>",
+  "transcript_path": "<redacted>",
+  "cwd": "<redacted>",
+  "hook_event_name": "PreToolUse",
+  "turn_id": "<redacted>",
+  "tool_name": "Bash",
+  "tool_use_id": "<redacted>",
+  "tool_input": "<redacted>"
+}

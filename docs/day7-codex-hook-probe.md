@@ -49,3 +49,20 @@ The model still repeated the original Bash output marker instead of the probe's
 `stopReason`. Therefore, in Codex CLI `0.163.0-alpha.10.2`, `continue: false` does not
 provide MiniSandbox's required model-visible replacement in either the ordinary tool
 path or the forced Code Mode path.
+
+## `PreToolUse.updatedInput` result
+
+A project-local `PreToolUse` probe returned `permissionDecision: "allow"` with an
+`updatedInput` that replaced only the Bash `command` field. Codex reported the hook as
+completed, executed the rewritten command, and showed the rewritten marker to the
+model. The original marker did not appear in the command result or final model answer.
+
+The sanitized real input is stored at
+`tests/fixtures/codex/pre-tool-use-bash.json`.
+
+This establishes a viable automatic boundary for Day 8: rewrite a native Bash request
+before execution so a MiniSandbox wrapper becomes the producer of the model-visible
+result. The wrapper can then execute the original command, measure actual output bytes,
+and either pass through a small result or persist a large result and print a bounded
+preview. Day 7 proves only the Codex rewrite contract; it does not implement that
+wrapper or its routing policy.
