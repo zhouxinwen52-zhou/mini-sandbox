@@ -36,3 +36,16 @@ For this installed version and ordinary CLI tool-call path, `continue: false` do
 provide the model-visible output replacement required by the current MiniSandbox
 architecture. Day 8 must not implement replacement on that assumption without a
 different verified contract.
+
+## Code Mode result
+
+The first Code Mode attempt fell back to a direct command because the CLI's
+`code_mode` feature was disabled. A second ephemeral session enabled both
+`code_mode` and `code_mode_only`, forcing the command through the experimental Code
+Mode path. The hook capture timestamp updated during that run, proving that the
+nested Bash call triggered `PostToolUse`.
+
+The model still repeated the original Bash output marker instead of the probe's
+`stopReason`. Therefore, in Codex CLI `0.163.0-alpha.10.2`, `continue: false` does not
+provide MiniSandbox's required model-visible replacement in either the ordinary tool
+path or the forced Code Mode path.
