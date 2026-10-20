@@ -1,15 +1,15 @@
 {
-  "description": "Project-local MiniSandbox PostToolUse contract probe.",
+  "description": "Project-local MiniSandbox PreToolUse rewrite contract probe.",
   "hooks": {
-    "PostToolUse": [
+    "PreToolUse": [
       {
         "matcher": "^Bash$",
         "hooks": [
           {
             "type": "command",
-            "command": "env MINI_SANDBOX_HOOK_CAPTURE=\"$(git rev-parse --show-toplevel)/.codex/hook-probe-event.json\" MINI_SANDBOX_HOOK_MODE=stop node \"$(git rev-parse --show-toplevel)/dist/codex/hook-probe.js\"",
+            "command": "env MINI_SANDBOX_HOOK_CAPTURE=\"$(git rev-parse --show-toplevel)/.codex/hook-probe-event.json\" node \"$(git rev-parse --show-toplevel)/dist/codex/pre-tool-use-probe.js\"",
             "timeout": 10,
-            "statusMessage": "Running the MiniSandbox PostToolUse probe"
+            "statusMessage": "Running the MiniSandbox PreToolUse rewrite probe"
           }
         ]
       }

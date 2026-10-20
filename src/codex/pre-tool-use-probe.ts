@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-type PostToolUseEvent = {
+type PreToolUseEvent = {
   session_id?: unknown;
   transcript_path?: unknown;
   cwd?: unknown;
@@ -8,8 +8,7 @@ type PostToolUseEvent = {
   turn_id?: unknown;
   tool_name?: unknown;
   tool_use_id?: unknown;
-  tool_input?: unknown;
-  tool_response?: unknown;
+  tool_input?: Record<string, unknown>;
 };
 
 const capturePath = process.env.MINI_SANDBOX_HOOK_CAPTURE;
@@ -18,7 +17,7 @@ if (capturePath === undefined) {
   throw new Error("MINI_SANDBOX_HOOK_CAPTURE is required");
 }
 
-const event = JSON.parse(readFileSync(0, "utf8")) as PostToolUseEvent;
+const event = JSON.parse(readFileSync(0, "utf8")) as PreToolUseEvent;
 const sanitizedEvent = {
   session_id: "<redacted>",
   transcript_path: "<redacted>",
@@ -28,16 +27,19 @@ const sanitizedEvent = {
   tool_name: event.tool_name,
   tool_use_id: "<redacted>",
   tool_input: "<redacted>",
-  tool_response: "<redacted>",
 };
 
 writeFileSync(capturePath, `${JSON.stringify(sanitizedEvent, null, 2)}\n`, "utf8");
 
-if (process.env.MINI_SANDBOX_HOOK_MODE === "stop") {
-  process.stdout.write(
-    `${JSON.stringify({
-      continue: false,
-      stopReason: "mini-sandbox hook probe replacement",
-    })}\n`,
-  );
-}
+process.stdout.write(
+  `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      updatedInput: {
+        ...event.tool_input,
+        command: "printf 'MINISANDBOX_PRETOOL_REWRITTEN_DAY7'",
+      },
+    },
+  })}\n`,
+);
