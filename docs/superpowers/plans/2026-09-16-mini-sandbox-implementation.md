@@ -4,7 +4,7 @@
 
 **Goal:** Build a working learning-focused MCP server and Codex hook adapter that persist oversized tool output and expose bounded retrieval.
 
-**Architecture:** Separate MCP, Codex-hook, and CLI entrypoints depend on a host-neutral core. Explicit execution calls `StoreOutput` directly; automatic interception routes on actual output size before calling it.
+**Architecture:** Separate MCP, Codex-hook, command-wrapper, and CLI entrypoints depend on a host-neutral core. Explicit execution calls `StoreOutput` directly; automatic interception rewrites native Bash input to the wrapper, which executes the original command and routes its captured output by actual byte size.
 
 **Tech Stack:** TypeScript, Node.js 22+, MCP TypeScript SDK v2 (`@modelcontextprotocol/server` and test-only `@modelcontextprotocol/client`), Zod, `better-sqlite3` with FTS5, Vitest.
 
@@ -14,7 +14,7 @@
 
 - Context/output sandbox only; no OS security claim.
 - Codex is the only MVP hook host.
-- Use actual PostToolUse output size for automatic routing.
+- Use the wrapper's captured output byte size for automatic routing.
 - Defaults: threshold 10 KiB, preview 2 KiB, query response 4 KiB.
 - Raw records are authoritative; FTS chunks are rebuildable.
 - Automatic hook failures fail open.
@@ -60,19 +60,19 @@ Checkpoint: invalid configuration is field-specific, purge is complete, and two 
 
 ### Day 7: Codex hook contract probe
 
-Build a minimal synchronous PostToolUse probe and capture sanitized real fixtures. Verify passthrough, `continue:false`, failure, model-visible replacement, and UI/transcript differences against the installed Codex version.
+Probe the installed Codex version with project-local hooks and sanitized real fixtures. Disprove PostToolUse model-visible replacement, verify `PreToolUse.updatedInput` Bash rewriting, and verify that a failed PreToolUse hook executes the original command unchanged.
 
 Checkpoint: evidence shows exactly what the next model request receives.
 
-### Day 8: RouteHookOutput and Codex adapter
+### Day 8: Bash rewrite adapter and command wrapper
 
-Implement actual-byte routing, Codex event normalization, StoredOutput response encoding, own-tool exclusion, malformed-input fail-open, and fixture tests.
+Implement Codex event normalization, guarded Bash-command rewriting, recursive-rewrite prevention, and a wrapper that executes the original command and preserves output plus exit metadata. Route captured output by actual UTF-8 byte size, encode StoredOutput responses, and cover malformed input and persistence fail-open behavior with fixture and wrapper tests.
 
-Checkpoint: only output above the configured threshold is stored and replaced.
+Checkpoint: a rewritten Bash call preserves small output unchanged, while only output above the configured threshold is stored and replaced with a bounded handle plus preview.
 
 ### Day 9: Real Codex integration
 
-Install the hook locally and run the acceptance matrix for small output, large output, retrieval, database failure, MCP-server-offline behavior, recursion prevention, and concurrent DB access.
+Use only the repository's project-local hook configuration and run the real Codex acceptance matrix for rewrite activation, small output, large output, retrieval, hook failure, database failure, MCP-server-offline behavior, recursion prevention, exit-status preservation, and concurrent DB access.
 
 Checkpoint: both explicit and automatic paths work in a real Codex session.
 
@@ -87,8 +87,10 @@ Checkpoint: a fresh setup follows the README successfully, and the learner can e
 - Build, typecheck, unit, integration, and MCP contract tests pass.
 - A real Codex session passes the acceptance matrix.
 - `ctx_run` always stores and returns a valid handle on successful persistence.
-- native tool output at or below threshold passes through unchanged.
-- native tool output above threshold is stored and replaced for the model.
+- a native Bash request is rewritten to the MiniSandbox wrapper before execution.
+- wrapped command output at or below threshold passes through unchanged.
+- wrapped command output above threshold is stored and replaced for the model.
+- a failed rewrite hook executes the original Bash command, and a wrapper persistence failure does not invent a handle.
 - `ctx_query` retrieves budgeted BM25-ranked snippets.
 - database failure produces observable automatic fail-open behavior.
 - documentation clearly states limitations and design decisions.
