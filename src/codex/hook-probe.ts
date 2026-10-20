@@ -32,3 +32,12 @@ const sanitizedEvent = {
 };
 
 writeFileSync(capturePath, `${JSON.stringify(sanitizedEvent, null, 2)}\n`, "utf8");
+
+if (process.env.MINI_SANDBOX_HOOK_MODE === "stop") {
+  process.stdout.write(
+    `${JSON.stringify({
+      continue: false,
+      stopReason: "mini-sandbox hook probe replacement",
+    })}\n`,
+  );
+}

@@ -46,4 +46,33 @@ describe("PostToolUse hook probe", () => {
       tool_response: "<redacted>",
     });
   });
+
+  it("emits a stop decision for the model-visible replacement probe", () => {
+    const captureDirectory = mkdtempSync(join(tmpdir(), "mini-sandbox-hook-probe-"));
+    const capturePath = join(captureDirectory, "event.json");
+
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/codex/hook-probe.ts"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          MINI_SANDBOX_HOOK_CAPTURE: capturePath,
+          MINI_SANDBOX_HOOK_MODE: "stop",
+        },
+        input: JSON.stringify({
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_response: "original tool output",
+        }),
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(
+      '{"continue":false,"stopReason":"mini-sandbox hook probe replacement"}\n',
+    );
+  });
 });
