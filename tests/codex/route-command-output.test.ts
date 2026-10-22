@@ -51,4 +51,24 @@ describe("routeCommandOutput", () => {
       stderr: "",
     });
   });
+
+  it("passes the original streams through when storing oversized output fails", () => {
+    const output = {
+      ...capturedOutput,
+      stdout: "stdout",
+      stderr: "stderr",
+      rawOutput: "stdoutstderr",
+    };
+    const storeOutput = vi.fn(() => {
+      throw new Error("database unavailable");
+    });
+
+    const routed = routeCommandOutput(
+      output,
+      { thresholdBytes: 2, projectId: "project", sessionId: "session", toolInput: "command" },
+      { storeOutput },
+    );
+
+    expect(routed).toEqual({ stdout: "stdout", stderr: "stderr" });
+  });
 });

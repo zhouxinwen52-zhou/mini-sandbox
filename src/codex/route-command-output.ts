@@ -27,13 +27,19 @@ export function routeCommandOutput(
     return { stdout: output.stdout, stderr: output.stderr };
   }
 
-  const storedOutput = storeOutput({
-    projectId: options.projectId,
-    sessionId: options.sessionId,
-    source: "codex-bash",
-    toolInput: options.toolInput,
-    ...output,
-  });
+  let storedOutput: StoredOutput;
+
+  try {
+    storedOutput = storeOutput({
+      projectId: options.projectId,
+      sessionId: options.sessionId,
+      source: "codex-bash",
+      toolInput: options.toolInput,
+      ...output,
+    });
+  } catch {
+    return { stdout: output.stdout, stderr: output.stderr };
+  }
 
   return {
     stdout: `${JSON.stringify(storedOutput)}\n`,
