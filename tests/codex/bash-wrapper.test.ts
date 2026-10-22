@@ -28,6 +28,29 @@ describe("Bash wrapper", () => {
     expect(result.status).toBe(7);
   });
 
+  it("rejects malformed Base64 without executing it as a command", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "src/codex/bash-wrapper.ts",
+        "--command-base64",
+        "not-base64!",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "mini-sandbox wrapper: --command-base64 must be valid Base64\n",
+    );
+    expect(result.status).toBe(1);
+  });
+
   it("stores oversized output and returns bounded metadata", () => {
     const homeDirectory = mkdtempSync(join(tmpdir(), "mini-sandbox-wrapper-"));
     const configDirectory = join(homeDirectory, ".mini-sandbox");

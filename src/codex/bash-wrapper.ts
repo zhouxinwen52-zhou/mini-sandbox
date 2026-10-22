@@ -10,12 +10,19 @@ import { openProjectDatabase } from "../storage/project-database.js";
 import { SqliteOutputStore } from "../storage/sqlite-output-store.js";
 import { routeCommandOutput } from "./route-command-output.js";
 
+const BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
 function readEncodedCommand(argv: string[]): string {
   const flagIndex = argv.indexOf("--command-base64");
   const encodedCommand = flagIndex === -1 ? undefined : argv[flagIndex + 1];
 
   if (encodedCommand === undefined || encodedCommand.length === 0) {
     throw new Error("--command-base64 is required");
+  }
+
+  if (!BASE64_PATTERN.test(encodedCommand)) {
+    throw new Error("--command-base64 must be valid Base64");
   }
 
   return Buffer.from(encodedCommand, "base64").toString("utf8");
