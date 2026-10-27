@@ -1,5 +1,5 @@
 {
-  "description": "Project-local MiniSandbox PreToolUse rewrite contract probe.",
+  "description": "Project-local MiniSandbox production PreToolUse rewrite.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,9 +7,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env MINI_SANDBOX_HOOK_CAPTURE=\"$(git rev-parse --show-toplevel)/.codex/hook-probe-event.json\" node \"$(git rev-parse --show-toplevel)/dist/codex/pre-tool-use-probe.js\"",
+            "command": "node \"$(git rev-parse --show-toplevel)/dist/codex/pre-tool-use.js\"",
             "timeout": 10,
-            "statusMessage": "Running the MiniSandbox PreToolUse rewrite probe"
+            "statusMessage": "Routing Bash through MiniSandbox"
           }
         ]
       }
