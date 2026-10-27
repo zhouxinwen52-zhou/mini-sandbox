@@ -94,7 +94,7 @@ describe("real project-local Codex hook", () => {
     }
   });
 
-  it("stores large output under the Codex session and makes hidden content retrievable", () => {
+  it("stores and retrieves large output without an MCP server", () => {
     const sandboxDirectory = mkdtempSync(
       join(tmpdir(), "mini-sandbox-real-hook-"),
     );
@@ -277,6 +277,26 @@ describe("real project-local Codex hook", () => {
     expect(hook.status).toBe(0);
     expect(hook.stdout).toBe("");
     expect(hook.stderr).toBe("");
+  });
+
+  it("fails without a hook decision when the event cannot be parsed", () => {
+    const config = JSON.parse(
+      readFileSync(".codex/hooks.json", "utf8"),
+    ) as HookConfig;
+    const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+    if (hookCommand === undefined) {
+      throw new Error("project PreToolUse hook command is missing");
+    }
+
+    const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input: "not valid JSON",
+    });
+
+    expect(hook.status).not.toBe(0);
+    expect(hook.stdout).toBe("");
+    expect(hook.stderr).not.toBe("");
   });
 
   it("returns the original output when database persistence fails", () => {
