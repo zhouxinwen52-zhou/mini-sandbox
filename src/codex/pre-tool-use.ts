@@ -16,9 +16,13 @@ const event = normalizePreToolUseEvent(
 if (event !== null) {
   const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
   const wrapperPath = join(projectRoot, "dist/codex/bash-wrapper.js");
+  const sessionEnvironment =
+    event.sessionId === undefined
+      ? ""
+      : `MINI_SANDBOX_SESSION_ID=${quoteShellWord(event.sessionId)} `;
   const updatedInput = rewriteBashToolInput(
     event,
-    `node ${quoteShellWord(wrapperPath)}`,
+    `${sessionEnvironment}node ${quoteShellWord(wrapperPath)}`,
   );
 
   if (updatedInput !== null) {

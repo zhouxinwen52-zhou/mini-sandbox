@@ -12,6 +12,10 @@ import { join } from "node:path";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { createQueryOutput } from "../../src/core/query-output.js";
+import { openProjectDatabase } from "../../src/storage/project-database.js";
+import { SqliteOutputStore } from "../../src/storage/sqlite-output-store.js";
+
 type HookConfig = {
   hooks: {
     PreToolUse: Array<{
@@ -85,6 +89,104 @@ describe("real project-local Codex hook", () => {
       expect(wrapped.stdout).toBe("DAY9_SMALL_OUTPUT");
       expect(wrapped.stderr).toBe("");
       expect(existsSync(dataDirectory)).toBe(false);
+    } finally {
+      rmSync(sandboxDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("stores large output under the Codex session and makes hidden content retrievable", () => {
+    const sandboxDirectory = mkdtempSync(
+      join(tmpdir(), "mini-sandbox-real-hook-"),
+    );
+    const configDirectory = join(sandboxDirectory, ".mini-sandbox");
+    const dataDirectory = join(sandboxDirectory, "data");
+    const sessionId = "day9-large-output";
+    const rawOutput = `HEAD-${"x".repeat(40)}-NEEDLE_DAY9-${"y".repeat(40)}-TAIL`;
+    mkdirSync(configDirectory);
+    writeFileSync(
+      join(configDirectory, "config.json"),
+      JSON.stringify({
+        thresholdBytes: 32,
+        previewBytes: 16,
+        queryBudgetBytes: 1_024,
+      }),
+    );
+
+    try {
+      const config = JSON.parse(
+        readFileSync(".codex/hooks.json", "utf8"),
+      ) as HookConfig;
+      const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+      if (hookCommand === undefined) {
+        throw new Error("project PreToolUse hook command is missing");
+      }
+
+      const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: sessionId,
+          cwd: process.cwd(),
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: `printf '${rawOutput}'` },
+        }),
+      });
+      expect(hook.status, hook.stderr).toBe(0);
+
+      const decision = JSON.parse(hook.stdout) as {
+        hookSpecificOutput: {
+          updatedInput: { command: string };
+        };
+      };
+      const wrapped = spawnSync(
+        "/bin/sh",
+        ["-c", decision.hookSpecificOutput.updatedInput.command],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: sandboxDirectory,
+            MINI_SANDBOX_DATA_DIR: dataDirectory,
+          },
+        },
+      );
+
+      expect(wrapped.status).toBe(0);
+      expect(wrapped.stderr).toBe("");
+      const stored = JSON.parse(wrapped.stdout) as {
+        handle: string;
+        preview: string;
+        truncated: boolean;
+        byteCount: number;
+      };
+      expect(stored).toMatchObject({
+        truncated: true,
+        byteCount: Buffer.byteLength(rawOutput, "utf8"),
+      });
+      expect(stored.preview).not.toContain("NEEDLE_DAY9");
+
+      const project = openProjectDatabase(dataDirectory, process.cwd());
+      try {
+        const store = new SqliteOutputStore(project.database);
+        expect(store.findByHandle(stored.handle)).toMatchObject({
+          sessionId,
+          rawOutput,
+        });
+
+        const query = createQueryOutput({
+          projectId: project.projectId,
+          sessionId,
+          queryBudgetBytes: 1_024,
+          search: (input) => store.search(input),
+        });
+        expect(query({ query: "NEEDLE_DAY9" }).text).toContain(
+          "[NEEDLE_DAY9]",
+        );
+      } finally {
+        project.database.close();
+      }
     } finally {
       rmSync(sandboxDirectory, { recursive: true, force: true });
     }
