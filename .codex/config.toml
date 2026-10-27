@@ -1,2 +1,6 @@
 # Activates the repository's project-scoped Codex configuration layer.
 # The production PreToolUse hook is defined in the adjacent hooks.json file.
+
+[mcp_servers.mini_sandbox]
+command = "/bin/sh"
+args = ["-c", 'exec node "$(git rev-parse --show-toplevel)/dist/index.js"']

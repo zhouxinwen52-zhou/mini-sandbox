@@ -10,9 +10,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Client } from "@modelcontextprotocol/client";
+import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from "@modelcontextprotocol/client/stdio";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { createQueryOutput } from "../../src/core/query-output.js";
 import { openProjectDatabase } from "../../src/storage/project-database.js";
 import { SqliteOutputStore } from "../../src/storage/sqlite-output-store.js";
 
@@ -94,7 +98,7 @@ describe("real project-local Codex hook", () => {
     }
   });
 
-  it("stores and retrieves large output without an MCP server", () => {
+  it("stores through the hook and retrieves through the MCP server", async () => {
     const sandboxDirectory = mkdtempSync(
       join(tmpdir(), "mini-sandbox-real-hook-"),
     );
@@ -174,18 +178,45 @@ describe("real project-local Codex hook", () => {
           sessionId,
           rawOutput,
         });
-
-        const query = createQueryOutput({
-          projectId: project.projectId,
-          sessionId,
-          queryBudgetBytes: 1_024,
-          search: (input) => store.search(input),
-        });
-        expect(query({ query: "NEEDLE_DAY9" }).text).toContain(
-          "[NEEDLE_DAY9]",
-        );
       } finally {
         project.database.close();
+      }
+
+      const client = new Client({
+        name: "day9-real-hook-test-client",
+        version: "0.1.0",
+      });
+      try {
+        await client.connect(
+          new StdioClientTransport({
+            command: process.execPath,
+            args: [join(process.cwd(), "dist/index.js")],
+            env: {
+              ...getDefaultEnvironment(),
+              HOME: sandboxDirectory,
+              MINI_SANDBOX_DATA_DIR: dataDirectory,
+              MINI_SANDBOX_SESSION_ID: "different-mcp-session",
+            },
+            stderr: "pipe",
+          }),
+        );
+        const queryResult = await client.callTool({
+          name: "ctx_query",
+          arguments: {
+            query: "NEEDLE_DAY9",
+            handle: stored.handle,
+          },
+        });
+
+        expect(queryResult.isError).not.toBe(true);
+        expect(queryResult.content).toEqual([
+          {
+            type: "text",
+            text: expect.stringContaining("[NEEDLE_DAY9]"),
+          },
+        ]);
+      } finally {
+        await client.close();
       }
     } finally {
       rmSync(sandboxDirectory, { recursive: true, force: true });
@@ -359,6 +390,105 @@ describe("real project-local Codex hook", () => {
     } finally {
       rmSync(sandboxDirectory, { recursive: true, force: true });
     }
+  });
+
+  it("preserves captured output and status when configuration loading fails", () => {
+    const sandboxDirectory = mkdtempSync(
+      join(tmpdir(), "mini-sandbox-real-hook-"),
+    );
+    const configDirectory = join(sandboxDirectory, ".mini-sandbox");
+    mkdirSync(configDirectory);
+    writeFileSync(join(configDirectory, "config.json"), "not valid JSON");
+
+    try {
+      const config = JSON.parse(
+        readFileSync(".codex/hooks.json", "utf8"),
+      ) as HookConfig;
+      const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+      if (hookCommand === undefined) {
+        throw new Error("project PreToolUse hook command is missing");
+      }
+
+      const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: "day9-config-failure",
+          cwd: process.cwd(),
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: {
+            command: "printf SUCCESS; printf ORIGINAL_ERROR >&2; exit 7",
+          },
+        }),
+      });
+      expect(hook.status, hook.stderr).toBe(0);
+
+      const decision = JSON.parse(hook.stdout) as {
+        hookSpecificOutput: {
+          updatedInput: { command: string };
+        };
+      };
+      const wrapped = spawnSync(
+        "/bin/sh",
+        ["-c", decision.hookSpecificOutput.updatedInput.command],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, HOME: sandboxDirectory },
+        },
+      );
+
+      expect(wrapped.stdout).toBe("SUCCESS");
+      expect(wrapped.stderr).toBe("ORIGINAL_ERROR");
+      expect(wrapped.status).toBe(7);
+    } finally {
+      rmSync(sandboxDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the configured zsh command semantics through the real hook", () => {
+    const config = JSON.parse(
+      readFileSync(".codex/hooks.json", "utf8"),
+    ) as HookConfig;
+    const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+    if (hookCommand === undefined) {
+      throw new Error("project PreToolUse hook command is missing");
+    }
+
+    const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input: JSON.stringify({
+        session_id: "day9-zsh-semantics",
+        cwd: process.cwd(),
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: {
+          command: 'values=(one two); printf "%s" "${values[1]}"',
+        },
+      }),
+    });
+    expect(hook.status, hook.stderr).toBe(0);
+
+    const decision = JSON.parse(hook.stdout) as {
+      hookSpecificOutput: {
+        updatedInput: { command: string };
+      };
+    };
+    const wrapped = spawnSync(
+      "/bin/sh",
+      ["-c", decision.hookSpecificOutput.updatedInput.command],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, SHELL: "/bin/zsh" },
+      },
+    );
+
+    expect(wrapped.stdout).toBe("one");
+    expect(wrapped.stderr).toBe("");
+    expect(wrapped.status).toBe(0);
   });
 
   it("lets the wrapper write while another connection holds a read transaction", () => {

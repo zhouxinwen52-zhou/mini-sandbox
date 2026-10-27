@@ -31,35 +31,41 @@ function readEncodedCommand(argv: string[]): string {
 async function main(): Promise<void> {
   const command = readEncodedCommand(process.argv.slice(2));
   const result = await executeCommand(command);
-  const config = loadConfig();
-  const sessionId =
-    process.env.MINI_SANDBOX_SESSION_ID ?? `session_${randomUUID()}`;
-  const dataDirectory =
-    process.env.MINI_SANDBOX_DATA_DIR ?? join(homedir(), ".mini-sandbox");
-  const projectRoot = findProjectRoot(process.cwd());
-  const routed = routeCommandOutput(
-    result,
-    {
-      thresholdBytes: config.thresholdBytes,
-      projectId: projectRoot,
-      sessionId,
-      toolInput: command,
-    },
-    {
-      storeOutput: (input) => {
-        const project = openProjectDatabase(dataDirectory, projectRoot);
+  let routed = { stdout: result.stdout, stderr: result.stderr };
 
-        try {
-          return createStoreOutput({
-            store: new SqliteOutputStore(project.database),
-            previewBytes: config.previewBytes,
-          })({ ...input, projectId: project.projectId });
-        } finally {
-          project.database.close();
-        }
+  try {
+    const config = loadConfig();
+    const sessionId =
+      process.env.MINI_SANDBOX_SESSION_ID ?? `session_${randomUUID()}`;
+    const dataDirectory =
+      process.env.MINI_SANDBOX_DATA_DIR ?? join(homedir(), ".mini-sandbox");
+    const projectRoot = findProjectRoot(process.cwd());
+    routed = routeCommandOutput(
+      result,
+      {
+        thresholdBytes: config.thresholdBytes,
+        projectId: projectRoot,
+        sessionId,
+        toolInput: command,
       },
-    },
-  );
+      {
+        storeOutput: (input) => {
+          const project = openProjectDatabase(dataDirectory, projectRoot);
+
+          try {
+            return createStoreOutput({
+              store: new SqliteOutputStore(project.database),
+              previewBytes: config.previewBytes,
+            })({ ...input, projectId: project.projectId });
+          } finally {
+            project.database.close();
+          }
+        },
+      },
+    );
+  } catch {
+    // Automatic interception is fail-open after the original command runs.
+  }
 
   process.stdout.write(routed.stdout);
   process.stderr.write(routed.stderr);

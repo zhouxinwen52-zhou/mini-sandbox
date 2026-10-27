@@ -2,10 +2,17 @@ import { spawn } from 'node:child_process';
 
 import type { CapturedOutput } from './captured-output.js';
 
-export function executeCommand(command: string): Promise<CapturedOutput> {
+export interface ExecuteCommandOptions {
+  shell?: string;
+}
+
+export function executeCommand(
+  command: string,
+  { shell = process.env.SHELL }: ExecuteCommandOptions = {},
+): Promise<CapturedOutput> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, {
-      shell: true,
+      shell: shell ?? true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const stdoutChunks: Buffer[] = [];
