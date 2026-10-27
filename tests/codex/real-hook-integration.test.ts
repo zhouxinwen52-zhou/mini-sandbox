@@ -278,4 +278,66 @@ describe("real project-local Codex hook", () => {
     expect(hook.stdout).toBe("");
     expect(hook.stderr).toBe("");
   });
+
+  it("returns the original output when database persistence fails", () => {
+    const sandboxDirectory = mkdtempSync(
+      join(tmpdir(), "mini-sandbox-real-hook-"),
+    );
+    const configDirectory = join(sandboxDirectory, ".mini-sandbox");
+    const blockedDataPath = join(sandboxDirectory, "blocked-data-path");
+    mkdirSync(configDirectory);
+    writeFileSync(
+      join(configDirectory, "config.json"),
+      JSON.stringify({ thresholdBytes: 4, previewBytes: 2 }),
+    );
+    writeFileSync(blockedDataPath, "not a directory");
+
+    try {
+      const config = JSON.parse(
+        readFileSync(".codex/hooks.json", "utf8"),
+      ) as HookConfig;
+      const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+      if (hookCommand === undefined) {
+        throw new Error("project PreToolUse hook command is missing");
+      }
+
+      const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: "day9-database-failure",
+          cwd: process.cwd(),
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "printf 12345" },
+        }),
+      });
+      expect(hook.status, hook.stderr).toBe(0);
+
+      const decision = JSON.parse(hook.stdout) as {
+        hookSpecificOutput: {
+          updatedInput: { command: string };
+        };
+      };
+      const wrapped = spawnSync(
+        "/bin/sh",
+        ["-c", decision.hookSpecificOutput.updatedInput.command],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: sandboxDirectory,
+            MINI_SANDBOX_DATA_DIR: blockedDataPath,
+          },
+        },
+      );
+
+      expect(wrapped.status).toBe(0);
+      expect(wrapped.stdout).toBe("12345");
+      expect(wrapped.stderr).toBe("");
+    } finally {
+      rmSync(sandboxDirectory, { recursive: true, force: true });
+    }
+  });
 });
