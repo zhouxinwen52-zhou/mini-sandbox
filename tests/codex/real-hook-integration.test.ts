@@ -106,7 +106,7 @@ describe("real project-local Codex hook", () => {
     }
   });
 
-  it("stores through the hook and retrieves through the MCP server", async () => {
+  it("retrieves hook output by exact handle across an independent MCP session", async () => {
     const sandboxDirectory = mkdtempSync(
       join(tmpdir(), "mini-sandbox-real-hook-"),
     );
