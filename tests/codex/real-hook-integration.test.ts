@@ -360,4 +360,83 @@ describe("real project-local Codex hook", () => {
       rmSync(sandboxDirectory, { recursive: true, force: true });
     }
   });
+
+  it("lets the wrapper write while another connection holds a read transaction", () => {
+    const sandboxDirectory = mkdtempSync(
+      join(tmpdir(), "mini-sandbox-real-hook-"),
+    );
+    const configDirectory = join(sandboxDirectory, ".mini-sandbox");
+    const dataDirectory = join(sandboxDirectory, "data");
+    mkdirSync(configDirectory);
+    writeFileSync(
+      join(configDirectory, "config.json"),
+      JSON.stringify({ thresholdBytes: 4, previewBytes: 2 }),
+    );
+
+    const longLivedProject = openProjectDatabase(
+      dataDirectory,
+      process.cwd(),
+    );
+    const longLivedStore = new SqliteOutputStore(longLivedProject.database);
+
+    try {
+      longLivedProject.database.exec("BEGIN");
+      expect(longLivedStore.stats().outputCount).toBe(0);
+
+      const config = JSON.parse(
+        readFileSync(".codex/hooks.json", "utf8"),
+      ) as HookConfig;
+      const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+      if (hookCommand === undefined) {
+        throw new Error("project PreToolUse hook command is missing");
+      }
+
+      const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: "day9-concurrent-access",
+          cwd: process.cwd(),
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "printf CONCURRENT_NEEDLE" },
+        }),
+      });
+      expect(hook.status, hook.stderr).toBe(0);
+
+      const decision = JSON.parse(hook.stdout) as {
+        hookSpecificOutput: {
+          updatedInput: { command: string };
+        };
+      };
+      const wrapped = spawnSync(
+        "/bin/sh",
+        ["-c", decision.hookSpecificOutput.updatedInput.command],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: sandboxDirectory,
+            MINI_SANDBOX_DATA_DIR: dataDirectory,
+          },
+        },
+      );
+      expect(wrapped.status, wrapped.stderr).toBe(0);
+
+      const stored = JSON.parse(wrapped.stdout) as { handle: string };
+      longLivedProject.database.exec("COMMIT");
+
+      expect(longLivedStore.findByHandle(stored.handle)).toMatchObject({
+        sessionId: "day9-concurrent-access",
+        rawOutput: "CONCURRENT_NEEDLE",
+      });
+    } finally {
+      if (longLivedProject.database.inTransaction) {
+        longLivedProject.database.exec("ROLLBACK");
+      }
+      longLivedProject.database.close();
+      rmSync(sandboxDirectory, { recursive: true, force: true });
+    }
+  });
 });
