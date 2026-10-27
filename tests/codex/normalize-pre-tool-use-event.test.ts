@@ -20,6 +20,7 @@ describe("normalizePreToolUseEvent", () => {
       }),
     ).toEqual({
       cwd: "/workspace/project",
+      sessionId: "session-secret",
       toolName: "Bash",
       toolInput: {
         command: "printf hello",

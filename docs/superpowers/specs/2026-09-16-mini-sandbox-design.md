@@ -44,7 +44,7 @@ The verified Codex contract is fail-open: if the `PreToolUse` hook process fails
 
 ## Storage and retrieval
 
-Each project uses a persistent database under `~/.mini-sandbox/projects/<project-hash>/mini-sandbox.db`. Records are tagged with a Codex session id. Queries default to the current session; an exact handle may address a historical session in the same project.
+Each project uses a persistent database under `~/.mini-sandbox/projects/<project-hash>/mini-sandbox.db`. Records are tagged with a Codex session id. Queries default to the MCP process's current session; an exact handle may address a historical session in the same project. Because Codex starts the project MCP server independently from `PreToolUse`, automatically wrapped Bash output is retrieved with the exact handle returned by the wrapper rather than an unscoped query.
 
 The `outputs` table is the source of truth. It stores the stable handle, scope and source metadata, tool input, raw output, available execution metadata, byte count, and timestamp.
 

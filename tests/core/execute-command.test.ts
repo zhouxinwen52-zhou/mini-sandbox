@@ -39,6 +39,17 @@ describe('executeCommand', () => {
     });
   });
 
+  test('uses the requested shell to preserve shell-specific semantics', async () => {
+    const result = await executeCommand(
+      'values=(one two); printf "%s" "${values[1]}"',
+      { shell: '/bin/zsh' },
+    );
+
+    expect(result.stdout).toBe('one');
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
+  });
+
   test('records the terminating signal', async () => {
     const result = await executeCommand('kill -TERM $$');
 

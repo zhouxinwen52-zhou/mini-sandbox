@@ -72,9 +72,9 @@ Checkpoint: a rewritten Bash call preserves small output unchanged, while only o
 
 ### Day 9: Real Codex integration
 
-Use only the repository's project-local hook configuration and run the real Codex acceptance matrix for rewrite activation, small output, large output, retrieval, hook failure, database failure, MCP-server-offline behavior, recursion prevention, exit-status preservation, and concurrent DB access.
+First replace the Day 7 probe rewrite with the production PreToolUse entry point, wiring event normalization and guarded Bash rewriting to the real command wrapper. Then use only the repository's project-local hook configuration and run the real Codex acceptance matrix for rewrite activation, small output, large output, retrieval, hook failure, database failure, MCP-server-offline behavior, recursion prevention, exit-status preservation, and concurrent DB access.
 
-Checkpoint: both explicit and automatic paths work in a real Codex session.
+Checkpoint: an ordinary Codex terminal command runs through the MiniSandbox wrapper instead of returning the Day 7 probe marker, and both explicit and automatic paths work in a real Codex session.
 
 ### Day 10: Documentation and teach-back
 
