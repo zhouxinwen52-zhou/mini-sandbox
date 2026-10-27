@@ -38,6 +38,14 @@ describe("real project-local Codex hook", () => {
     expect(build.status, build.stderr || build.stdout).toBe(0);
   });
 
+  it("grants the wrapper access to the global MiniSandbox data directory", () => {
+    const projectConfig = readFileSync(".codex/config.toml", "utf8");
+
+    expect(projectConfig).toMatch(
+      /\[sandbox_workspace_write\][\s\S]*writable_roots\s*=\s*\["~\/\.mini-sandbox"\]/,
+    );
+  });
+
   it("passes small command output through unchanged", () => {
     const sandboxDirectory = mkdtempSync(
       join(tmpdir(), "mini-sandbox-real-hook-"),
