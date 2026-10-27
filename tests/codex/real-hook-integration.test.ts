@@ -191,4 +191,91 @@ describe("real project-local Codex hook", () => {
       rmSync(sandboxDirectory, { recursive: true, force: true });
     }
   });
+
+  it("preserves stdout, stderr, and a non-zero exit status", () => {
+    const sandboxDirectory = mkdtempSync(
+      join(tmpdir(), "mini-sandbox-real-hook-"),
+    );
+    const configDirectory = join(sandboxDirectory, ".mini-sandbox");
+    mkdirSync(configDirectory);
+    writeFileSync(
+      join(configDirectory, "config.json"),
+      JSON.stringify({ thresholdBytes: 1_024, previewBytes: 128 }),
+    );
+
+    try {
+      const config = JSON.parse(
+        readFileSync(".codex/hooks.json", "utf8"),
+      ) as HookConfig;
+      const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+      if (hookCommand === undefined) {
+        throw new Error("project PreToolUse hook command is missing");
+      }
+
+      const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: "day9-exit-status",
+          cwd: process.cwd(),
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: {
+            command: "printf stdout; printf stderr >&2; exit 7",
+          },
+        }),
+      });
+      expect(hook.status, hook.stderr).toBe(0);
+
+      const decision = JSON.parse(hook.stdout) as {
+        hookSpecificOutput: {
+          updatedInput: { command: string };
+        };
+      };
+      const wrapped = spawnSync(
+        "/bin/sh",
+        ["-c", decision.hookSpecificOutput.updatedInput.command],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, HOME: sandboxDirectory },
+        },
+      );
+
+      expect(wrapped.stdout).toBe("stdout");
+      expect(wrapped.stderr).toBe("stderr");
+      expect(wrapped.status).toBe(7);
+    } finally {
+      rmSync(sandboxDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not recursively rewrite an existing wrapper command", () => {
+    const config = JSON.parse(
+      readFileSync(".codex/hooks.json", "utf8"),
+    ) as HookConfig;
+    const hookCommand = config.hooks.PreToolUse[0]?.hooks[0]?.command;
+    if (hookCommand === undefined) {
+      throw new Error("project PreToolUse hook command is missing");
+    }
+
+    const hook = spawnSync("/bin/sh", ["-c", hookCommand], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input: JSON.stringify({
+        session_id: "day9-recursion",
+        cwd: process.cwd(),
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: {
+          command:
+            "MINI_SANDBOX_WRAPPED=1 node wrapper.js --command-base64 cHJpbnRmIGhlbGxv",
+        },
+      }),
+    });
+
+    expect(hook.status).toBe(0);
+    expect(hook.stdout).toBe("");
+    expect(hook.stderr).toBe("");
+  });
 });
