@@ -11,6 +11,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "prebenchmark:bytes": "npm run build",
+    "benchmark:bytes": "node scripts/benchmark-byte-savings.mjs",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
