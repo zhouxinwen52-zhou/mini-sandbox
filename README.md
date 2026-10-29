@@ -19,9 +19,11 @@ or transcripts.
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22.12 or newer in the Node 22 line, Node.js 24, or Node.js 26+
 - npm
 - Git
+- A Unix-like environment with executable `/bin/sh` and `/bin/zsh`; the full
+  test suite verifies both generic shell and zsh-specific command semantics
 - A Codex version that supports project-local configuration and synchronous
   `PreToolUse` hooks
 
@@ -31,6 +33,8 @@ Check the local tools before installing:
 node --version
 npm --version
 git --version
+test -x /bin/sh
+test -x /bin/zsh
 ```
 
 ## Install and verify
@@ -67,11 +71,27 @@ In the fresh Codex chat, ask Codex to run a small Bash command:
 printf 'mini-sandbox-small-output\n'
 ```
 
-The text should pass through unchanged. Then ask it to run a command whose
-output exceeds the default 10 KiB threshold. The result sent to the model
-should be bounded JSON containing a handle, preview, truncation flag, and the
-original UTF-8 byte count. Use that exact handle with `ctx_query` to retrieve a
-term that was outside the preview.
+The text should pass through unchanged. Then ask Codex to run this command,
+which places a unique search term in the middle of more than 10 KiB of output:
+
+```sh
+node -e 'process.stdout.write("x".repeat(6000) + "MINI_SANDBOX_MIDDLE_NEEDLE" + "y".repeat(6000))'
+```
+
+The result sent to the model should be bounded JSON containing a handle,
+preview, truncation flag, and the original UTF-8 byte count. Copy its `out_...`
+handle into an exact-handle query:
+
+```json
+{
+  "query": "MINI_SANDBOX_MIDDLE_NEEDLE",
+  "handle": "out_replace_with_the_returned_handle"
+}
+```
+
+Ask Codex to call `mini_sandbox.ctx_query` with that input. The returned
+snippet should contain `[MINI_SANDBOX_MIDDLE_NEEDLE]`, even though the term was
+outside the original preview.
 
 You can inspect the current project's local store from a terminal:
 
@@ -119,6 +139,22 @@ node dist/cli.js purge
 `purge` permanently removes every stored output for the detected project, so
 inspect `stats` first.
 
+## Byte-savings benchmark
+
+Run the reproducible benchmark with:
+
+```sh
+npm run benchmark:bytes
+```
+
+It builds the project, sends a deterministic 64 KiB result through the real
+compiled Bash wrapper, and compares those original bytes with the complete
+JSON written back for the model. The benchmark intentionally uses a 1 KiB
+storage threshold and a 256-byte preview so it stays fast and makes wrapper
+overhead visible; these are isolated benchmark values, not the default user
+configuration. Temporary configuration and database files are removed after
+each run.
+
 ## Disable or remove
 
 To disable MiniSandbox for this repository without deleting data, stop using
@@ -154,7 +190,9 @@ The project is designed to teach:
 - UTF-8 byte budgets, previews, and chunking;
 - session scoping and observable fail-open behavior.
 
-See the [architecture design](docs/superpowers/specs/2026-09-16-mini-sandbox-design.md),
+Start with the Day 10
+[architecture and failure-path teach-back](docs/day10-architecture-and-failure-paths.md),
+then see the full [architecture design](docs/superpowers/specs/2026-09-16-mini-sandbox-design.md),
 the [ten-day implementation plan](docs/superpowers/plans/2026-09-16-mini-sandbox-implementation.md),
 and the post-MVP [cross-session query design](docs/superpowers/specs/2026-10-27-cross-session-query-design.md).
 
