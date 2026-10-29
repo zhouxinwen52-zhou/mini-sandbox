@@ -82,6 +82,10 @@ Finish installation and removal guidance, architecture and data-flow documentati
 
 Checkpoint: a fresh setup follows the README successfully, and the learner can explain the architecture and every failure path without reading the code.
 
+## Post-MVP roadmap
+
+The approved direction for current-session, historical-session, multi-handle, and project-wide retrieval is documented in [Cross-Session Query Design](../specs/2026-10-27-cross-session-query-design.md). It remains outside the ten-day MVP and does not block Day 10 completion.
+
 ## Final MVP acceptance
 
 - Build, typecheck, unit, integration, and MCP contract tests pass.
